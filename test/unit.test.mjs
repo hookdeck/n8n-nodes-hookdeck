@@ -33,12 +33,12 @@ import {
 import {
 	buildResourceName,
 	describeUnreachableWebhookUrl,
-	isTestRegistration,
 	isTestWebhookUrl,
 	sanitizeName,
 } from '../dist/nodes/Hookdeck/Naming.js';
 import { Hookdeck } from '../dist/nodes/Hookdeck/Hookdeck.node.js';
 import { HookdeckTrigger } from '../dist/nodes/Hookdeck/HookdeckTrigger.node.js';
+import { registrationFor } from '../dist/nodes/Hookdeck/Registration.js';
 import { SOURCE_TYPE_AUTH_FIELDS, SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
 
 /** Hookdeck's own constraint on source, destination and connection names. */
@@ -83,22 +83,6 @@ test('buildResourceName truncates without losing the -test suffix', () => {
 test('isTestWebhookUrl distinguishes the two n8n webhook URL forms', () => {
 	assert.equal(isTestWebhookUrl('https://n8n.example.com/webhook-test/abc'), true);
 	assert.equal(isTestWebhookUrl('https://n8n.example.com/webhook/abc'), false);
-});
-
-test('isTestRegistration trusts the execution mode over the URL path', () => {
-	// n8n reports 'manual' only for an editor test listen. Confirmed live: a test
-	// listen reports manual, an activation does not.
-	assert.equal(isTestRegistration('manual', 'https://n8n.example.com/webhook-test/abc'), true);
-	assert.equal(isTestRegistration('trigger', 'https://n8n.example.com/webhook/abc'), false);
-
-	// The point of using mode: an instance that renamed its test endpoint via
-	// N8N_ENDPOINT_WEBHOOK_TEST still classifies a test listen correctly, where
-	// the path check alone would file it as production and repoint the live
-	// connection at a URL that dies after 120 seconds.
-	assert.equal(isTestRegistration('manual', 'https://n8n.example.com/try-it/abc'), true);
-
-	// The path check remains as a fallback for any other mode value.
-	assert.equal(isTestRegistration('internal', 'https://n8n.example.com/webhook-test/abc'), true);
 });
 
 test('generateSigningSecret returns distinct high-entropy secrets', () => {
@@ -300,10 +284,12 @@ test('platform auth fields cover the source types that need a secret', () => {
 	assert.ok(SOURCE_TYPE_AUTH_FIELDS.POSTMARK.length > 1);
 	assert.deepEqual([...SOURCE_TYPE_AUTH_FIELDS.POSTMARK].sort(), ['password', 'username']);
 
-	// Every mapped type must name at least one field, or the lookup is useless.
+	// An empty array is meaningful: the type accepts a choice of schemes, so a
+	// single secret cannot say which applies and is refused rather than guessed.
 	for (const [type, fields] of Object.entries(SOURCE_TYPE_AUTH_FIELDS)) {
-		assert.ok(Array.isArray(fields) && fields.length > 0, `${type} has no auth fields`);
+		assert.ok(Array.isArray(fields), `${type} should map to an array`);
 	}
+	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.HTTP, []);
 });
 
 test('every source type offered in the UI is a real spec value', () => {
@@ -561,15 +547,14 @@ test('trigger has no main input, so it can only start a workflow', () => {
  * lifecycle. `calls` records every Hookdeck request so a test can assert which
  * connection a pause or delete actually targeted.
  */
-function fakeHookContext({ webhookUrl, staticData, params = {} }) {
+function fakeHookContext({ webhookUrl, staticData, params = {}, mode = 'trigger' }) {
 	const calls = [];
 	return {
 		calls,
 		staticData,
 		getWorkflowStaticData: () => staticData,
 		getNodeWebhookUrl: () => webhookUrl,
-		// n8n reports 'manual' for a test listen; provisioning on activation is not.
-		getMode: () => 'trigger',
+		getMode: () => mode,
 		getWorkflow: () => ({ id: 'wf1' }),
 		getNode: () => ({ id: 'node1', name: 'Hookdeck Trigger', type: 'hookdeckTrigger' }),
 		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),
@@ -653,6 +638,93 @@ test('provisioned destination disables path forwarding and signs deliveries', as
 	assert.ok(upsert.body.rules.some((r) => r.type === 'deduplicate'));
 });
 
+test('registrationFor identifies a slot by the URL it was provisioned with', () => {
+	// The recorded destination is the only signal that survives an instance
+	// renaming its test endpoint, and it is the one teardown must rely on.
+	const staticData = {
+		production: { connectionId: 'web_PROD', destinationUrl: 'https://n8n.example.com/hooks/abc' },
+		test: { connectionId: 'web_TEST', destinationUrl: 'https://n8n.example.com/try/abc' },
+	};
+
+	// Mode says 'internal' — what n8n reports when closing a test listen — and the
+	// path is unrecognisable, yet the test slot is still identified correctly.
+	const closing = registrationFor(staticData, 'https://n8n.example.com/try/abc', 'internal');
+	assert.equal(closing.isTest, true);
+	assert.equal(closing.registration.connectionId, 'web_TEST');
+
+	const production = registrationFor(staticData, 'https://n8n.example.com/hooks/abc', 'internal');
+	assert.equal(production.isTest, false);
+	assert.equal(production.registration.connectionId, 'web_PROD');
+});
+
+test('registrationFor falls back to mode, then to the webhook path', () => {
+	// Nothing recorded yet: a first-time test listen is known only by its mode.
+	assert.equal(registrationFor({}, 'https://n8n.example.com/try/abc', 'manual').isTest, true);
+
+	// Mode is unhelpful on teardown, so the path carries it on a stock instance.
+	assert.equal(
+		registrationFor({}, 'https://n8n.example.com/webhook-test/abc', 'internal').isTest,
+		true,
+	);
+	assert.equal(
+		registrationFor({}, 'https://n8n.example.com/webhook/abc', 'internal').isTest,
+		false,
+	);
+});
+
+test('closing a test listen never touches the production connection', async () => {
+	// The failure this prevents: on an instance with a renamed test endpoint,
+	// teardown classified as production pauses the live connection while the
+	// workflow is still running, and abandons the dead test connection.
+	const staticData = {
+		production: {
+			connectionId: 'web_PROD',
+			signingSecret: 'p',
+			destinationUrl: 'https://n8n.example.com/hooks/abc',
+		},
+		test: {
+			connectionId: 'web_TEST',
+			signingSecret: 't',
+			destinationUrl: 'https://n8n.example.com/try/abc',
+		},
+	};
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/try/abc',
+		staticData,
+		params: { options: {} },
+		mode: 'internal',
+	});
+
+	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);
+
+	assert.ok(ctx.calls.some((c) => c.method === 'DELETE' && c.url.endsWith('/connections/web_TEST')));
+	assert.ok(!ctx.calls.some((c) => c.url.includes('web_PROD')), 'production must not be touched');
+	assert.equal(staticData.production.connectionId, 'web_PROD');
+});
+
+test('platform auth covers inline and choice-of-scheme shapes', () => {
+	// MANAGED declares its auth inline rather than by $ref; missing it sent the
+	// secret to webhook_secret_key, which the API rejects.
+	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.MANAGED, ['token']);
+	const managed = buildSourceConfig.call(
+		fakeSourceConfigContext({ platformSecret: 'tok' }),
+		'MANAGED',
+		{},
+	);
+	assert.deepEqual(managed.auth, { token: 'tok' });
+
+	// HTTP accepts a choice of schemes, so one secret cannot say which applies.
+	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.HTTP, []);
+	assert.throws(
+		() => buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'HTTP', {}),
+		(error) => {
+			assert.match(error.message, /choice of verification schemes/);
+			assert.match(error.description ?? '', /Source Config \(JSON\)/);
+			return true;
+		},
+	);
+});
+
 test('deleting a test registration leaves production untouched', async () => {
 	const staticData = {
 		production: { connectionId: 'web_PROD', signingSecret: 'p' },
@@ -662,6 +734,8 @@ test('deleting a test registration leaves production untouched', async () => {
 		webhookUrl: 'https://n8n.example.com/webhook-test/abc',
 		staticData,
 		params: { options: {} },
+		// n8n tears a test listen down with mode 'internal', not 'manual'.
+		mode: 'internal',
 	});
 
 	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);

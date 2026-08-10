@@ -26,18 +26,26 @@ const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
  */
 function platformAuthField(this: IHookFunctions, sourceType: string): string {
 	const fields = SOURCE_TYPE_AUTH_FIELDS[sourceType];
-	if (!fields || fields.length === 0) return DEFAULT_PLATFORM_AUTH_FIELD;
+
+	// Not in the map at all: an unknown or newer type. The common field is the
+	// best available guess, and the API says so plainly if it is wrong.
+	if (!fields) return DEFAULT_PLATFORM_AUTH_FIELD;
+
 	if (fields.length === 1) return fields[0];
 
-	throw new NodeOperationError(
-		this.getNode(),
-		`${sourceType} verification needs more than one value, so Webhook Secret cannot express it`,
-		{
-			description: `It expects ${fields.join(', ')}. Clear Webhook Secret and set Options → Source Config (JSON) to {"auth_type": "${sourceType}", "auth": {${fields
-				.map((f) => `"${f}": "…"`)
-				.join(', ')}}}.`,
-		},
-	);
+	const reason =
+		fields.length === 0
+			? `${sourceType} accepts a choice of verification schemes, so a single secret cannot say which one to use`
+			: `${sourceType} verification needs more than one value, so Webhook Secret cannot express it`;
+
+	const shape =
+		fields.length === 0
+			? '"auth_type": "HMAC", "auth": { … }'
+			: `"auth_type": "${sourceType}", "auth": {${fields.map((f) => `"${f}": "…"`).join(', ')}}`;
+
+	throw new NodeOperationError(this.getNode(), reason, {
+		description: `Clear Webhook Secret and set Options → Source Config (JSON) to {${shape}}.`,
+	});
 }
 
 /**

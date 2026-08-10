@@ -22,12 +22,7 @@ import {
 	verifySignature,
 } from './Delivery';
 import { HOOKDECK_DASHBOARD_URL, hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
-import {
-	buildResourceName,
-	describeUnreachableWebhookUrl,
-	isTestRegistration,
-	sanitizeName,
-} from './Naming';
+import { buildResourceName, describeUnreachableWebhookUrl, sanitizeName } from './Naming';
 import { registrationFor } from './Registration';
 import type { HookdeckStaticData } from './Registration';
 import { triggerProperties } from './descriptions/TriggerProperties';
@@ -146,10 +141,7 @@ export class HookdeckTrigger implements INodeType {
 				const webhookUrl = this.getNodeWebhookUrl('default');
 				if (!webhookUrl) return false;
 
-				const registration = registrationFor(
-					staticData,
-					isTestRegistration(this.getMode(), webhookUrl),
-				);
+				const { registration } = registrationFor(staticData, webhookUrl, this.getMode());
 				if (!registration.connectionId) return false;
 
 				let connection: IDataObject;
@@ -228,8 +220,7 @@ export class HookdeckTrigger implements INodeType {
 					});
 				}
 
-				const isTest = isTestRegistration(this.getMode(), webhookUrl);
-				const registration = registrationFor(staticData, isTest);
+				const { registration, isTest } = registrationFor(staticData, webhookUrl, this.getMode());
 				const workflowId = this.getWorkflow().id ?? 'workflow';
 				const nodeId = this.getNode().id;
 
@@ -289,8 +280,7 @@ export class HookdeckTrigger implements INodeType {
 				// deregistering, so a lapsed test webhook never touches the production
 				// connection.
 				const webhookUrl = this.getNodeWebhookUrl('default');
-				const isTest = webhookUrl ? isTestRegistration(this.getMode(), webhookUrl) : false;
-				const registration = registrationFor(staticData, isTest);
+				const { registration, isTest } = registrationFor(staticData, webhookUrl, this.getMode());
 				if (!registration.connectionId) return true;
 
 				const options = this.getNodeParameter('options', {}) as IDataObject;

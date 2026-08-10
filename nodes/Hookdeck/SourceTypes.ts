@@ -167,16 +167,16 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Zoom', value: 'ZOOM' },
 ];
 
-
 /**
- * Auth fields each platform source type expects, generated from the same
- * OpenAPI schema as the type list above (`SourceConfigWebhookAuth*`, keyed by
- * `x-docs-type`).
+ * Auth fields each source type expects, generated from the same OpenAPI schema
+ * as the type list above (`SourceTypeConfig*.properties.auth`, following $refs
+ * and inline definitions alike).
  *
- * Most platforms take a single `webhook_secret_key`, but a substantial minority
- * use a differently named field, and a few need several. The node uses this to
- * put a single supplied secret in the right place, and to refuse clearly when a
- * type needs more than one value.
+ * One entry means a single supplied secret can be placed correctly. Several
+ * means the type needs more than one value. An empty array means the type
+ * accepts a choice of auth shapes, so which fields apply cannot be inferred —
+ * both of the latter are refused with guidance rather than guessed at, since a
+ * secret in the wrong field is rejected by the API at activation.
  */
 export const SOURCE_TYPE_AUTH_FIELDS: Record<string, string[]> = {
 	'ADYEN': ['webhook_secret_key'],
@@ -228,6 +228,7 @@ export const SOURCE_TYPE_AUTH_FIELDS: Record<string, string[]> = {
 	'GITLAB': ['api_key'],
 	'GOCARDLESS': ['webhook_secret_key'],
 	'GREENDOT': ['password', 'username'],
+	'HTTP': [],
 	'HUBSPOT': ['webhook_secret_key'],
 	'INTERCOM': ['webhook_secret_key'],
 	'LINEAR': ['webhook_secret_key'],
@@ -235,6 +236,7 @@ export const SOURCE_TYPE_AUTH_FIELDS: Record<string, string[]> = {
 	'LITHIC': ['webhook_secret_key'],
 	'MAILCHIMP': ['webhook_secret_key'],
 	'MAILGUN': ['webhook_secret_key'],
+	'MANAGED': ['token'],
 	'MERAKI': ['api_key'],
 	'NEON': ['neon_auth_url'],
 	'NMI': ['webhook_secret_key'],
@@ -256,7 +258,6 @@ export const SOURCE_TYPE_AUTH_FIELDS: Record<string, string[]> = {
 	'PORTAL': ['webhook_secret_key'],
 	'POSTMARK': ['password', 'username'],
 	'PRAXIS': ['webhook_secret_key'],
-	'PROPERTY-FINDER': ['webhook_secret_key'],
 	'PYLON': ['webhook_secret_key'],
 	'QUOTER': ['webhook_secret_key'],
 	'RAZORPAY': ['webhook_secret_key'],
@@ -307,6 +308,7 @@ export const SOURCE_TYPE_AUTH_FIELDS: Record<string, string[]> = {
 	'VERCEL_LOG_DRAINS': ['webhook_secret_key'],
 	'VOLUME': ['environment'],
 	'WALMART': ['webhook_secret_key'],
+	'WEBHOOK': [],
 	'WECHAT': ['public_key'],
 	'WHATSAPP': ['webhook_secret_key'],
 	'WIX': ['webhook_secret_key'],

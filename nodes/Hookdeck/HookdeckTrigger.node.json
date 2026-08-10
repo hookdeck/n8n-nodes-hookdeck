@@ -1,8 +1,11 @@
 {
-	"node": "n8n-nodes-base.hookdeckTrigger",
+	"node": "@hookdeck/n8n-nodes-hookdeck.hookdeckTrigger",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
-	"categories": ["Development", "Developer Tools"],
+	"categories": [
+		"Development",
+		"Developer Tools"
+	],
 	"resources": {
 		"credentialDocumentation": [
 			{
