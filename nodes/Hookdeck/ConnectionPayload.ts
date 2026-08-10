@@ -10,7 +10,7 @@ import type { IDataObject, IHookFunctions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
 import { SIGNATURE_HEADER } from './Delivery';
-import { SOURCE_TYPE_AUTH_FIELDS } from './SourceTypes';
+import { SOURCE_TYPE_AUTH } from './SourceTypes';
 
 /** Field a platform's verification secret belongs in. */
 const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
@@ -19,33 +19,52 @@ const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
  * Resolve which auth field a single supplied secret should populate.
  *
  * Most platforms name it `webhook_secret_key`, but a sizeable minority use
- * `api_key`, `public_key` or similar, and putting a secret in the wrong field is
- * rejected by the API at activation. A handful need more than one value, which a
- * single input cannot express — those are refused here with the field names, so
- * the message says what to do rather than surfacing a 422.
+ * `api_key`, `public_key` or similar, and a secret in the wrong field is
+ * rejected by the API at activation. Three cases cannot be served by a single
+ * input at all — a type needing several values, one accepting a choice of
+ * schemes, and one taking no secret — and each is refused with the guidance that
+ * fits it, rather than being allowed through to surface as a 422.
  */
 function platformAuthField(this: IHookFunctions, sourceType: string): string {
-	const fields = SOURCE_TYPE_AUTH_FIELDS[sourceType];
+	const shape = SOURCE_TYPE_AUTH[sourceType];
 
 	// Not in the map at all: an unknown or newer type. The common field is the
 	// best available guess, and the API says so plainly if it is wrong.
-	if (!fields) return DEFAULT_PLATFORM_AUTH_FIELD;
+	if (!shape) return DEFAULT_PLATFORM_AUTH_FIELD;
 
-	if (fields.length === 1) return fields[0];
+	if (shape.kind === 'none') {
+		throw new NodeOperationError(
+			this.getNode(),
+			`${sourceType} does not take a verification secret`,
+			{
+				description:
+					'Leave Webhook Secret empty. Hookdeck verifies this platform without one, and sending a secret it does not expect is rejected.',
+			},
+		);
+	}
 
-	const reason =
-		fields.length === 0
-			? `${sourceType} accepts a choice of verification schemes, so a single secret cannot say which one to use`
-			: `${sourceType} verification needs more than one value, so Webhook Secret cannot express it`;
+	if (shape.kind === 'choice') {
+		throw new NodeOperationError(
+			this.getNode(),
+			`${sourceType} accepts a choice of verification schemes, so a single secret cannot say which one to use`,
+			{
+				description:
+					'Clear Webhook Secret and set Options → Source Config (JSON) to {"auth_type": "HMAC", "auth": { … }}, naming the scheme you want.',
+			},
+		);
+	}
 
-	const shape =
-		fields.length === 0
-			? '"auth_type": "HMAC", "auth": { … }'
-			: `"auth_type": "${sourceType}", "auth": {${fields.map((f) => `"${f}": "…"`).join(', ')}}`;
+	if (shape.fields.length === 1) return shape.fields[0];
 
-	throw new NodeOperationError(this.getNode(), reason, {
-		description: `Clear Webhook Secret and set Options → Source Config (JSON) to {${shape}}.`,
-	});
+	throw new NodeOperationError(
+		this.getNode(),
+		`${sourceType} verification needs more than one value, so Webhook Secret cannot express it`,
+		{
+			description: `Clear Webhook Secret and set Options → Source Config (JSON) to {"auth_type": "${sourceType}", "auth": {${shape.fields
+				.map((f) => `"${f}": "…"`)
+				.join(', ')}}}.`,
+		},
+	);
 }
 
 /**

@@ -39,7 +39,7 @@ import {
 import { Hookdeck } from '../dist/nodes/Hookdeck/Hookdeck.node.js';
 import { HookdeckTrigger } from '../dist/nodes/Hookdeck/HookdeckTrigger.node.js';
 import { registrationFor } from '../dist/nodes/Hookdeck/Registration.js';
-import { SOURCE_TYPE_AUTH_FIELDS, SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
+import { SOURCE_TYPE_AUTH, SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
 
 /** Hookdeck's own constraint on source, destination and connection names. */
 const HOOKDECK_NAME_PATTERN = /^[A-z0-9-_]+$/;
@@ -273,31 +273,31 @@ test('describeUnreachableWebhookUrl rejects CGNAT addresses', () => {
 	assert.equal(describeUnreachableWebhookUrl('http://100.128.0.1/webhook/abc'), undefined);
 });
 
-test('platform auth fields cover the source types that need a secret', () => {
-	// A secret placed in the wrong field is rejected by the API at activation,
-	// so the mapping has to come from the spec rather than be assumed.
-	assert.equal(SOURCE_TYPE_AUTH_FIELDS.STRIPE[0], 'webhook_secret_key');
-	assert.equal(SOURCE_TYPE_AUTH_FIELDS.GITLAB[0], 'api_key');
-	assert.equal(SOURCE_TYPE_AUTH_FIELDS.TWITTER[0], 'api_key');
+test('platform auth shapes come from the spec, not assumption', () => {
+	// A secret placed in the wrong field is rejected by the API at activation.
+	assert.deepEqual(SOURCE_TYPE_AUTH.STRIPE, { kind: 'fields', fields: ['webhook_secret_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.GITLAB, { kind: 'fields', fields: ['api_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.POSTMARK, { kind: 'fields', fields: ['password', 'username'] });
 
-	// Types needing several values cannot be expressed by one secret input.
-	assert.ok(SOURCE_TYPE_AUTH_FIELDS.POSTMARK.length > 1);
-	assert.deepEqual([...SOURCE_TYPE_AUTH_FIELDS.POSTMARK].sort(), ['password', 'username']);
+	// The three non-field cases must stay distinguishable: they need different
+	// answers, and an array alone cannot tell "no secret" from "several schemes".
+	assert.equal(SOURCE_TYPE_AUTH.HTTP.kind, 'choice');
+	assert.equal(SOURCE_TYPE_AUTH.AWS_SNS.kind, 'none');
+	assert.equal(SOURCE_TYPE_AUTH.MONDAY.kind, 'none');
 
-	// An empty array is meaningful: the type accepts a choice of schemes, so a
-	// single secret cannot say which applies and is refused rather than guessed.
-	for (const [type, fields] of Object.entries(SOURCE_TYPE_AUTH_FIELDS)) {
-		assert.ok(Array.isArray(fields), `${type} should map to an array`);
+	for (const [type, shape] of Object.entries(SOURCE_TYPE_AUTH)) {
+		assert.ok(['fields', 'choice', 'none'].includes(shape.kind), `${type} has an unknown kind`);
+		if (shape.kind === 'fields') {
+			assert.ok(shape.fields.length > 0, `${type} claims fields but names none`);
+		}
 	}
-	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.HTTP, []);
 });
 
-test('every source type offered in the UI is a real spec value', () => {
-	// The auth map and the dropdown are generated from the same schema; a type in
-	// the map that the UI never offers would be dead weight, and the reverse
-	// would mean offering something unprovisionable.
+test('every mapped source type is one the UI actually offers', () => {
+	// Both are generated from the same schema; a mapped type the UI never offers
+	// is dead weight, and the reverse would mean offering something unprovisionable.
 	const offered = new Set(SOURCE_TYPE_OPTIONS.map((o) => o.value));
-	for (const type of Object.keys(SOURCE_TYPE_AUTH_FIELDS)) {
+	for (const type of Object.keys(SOURCE_TYPE_AUTH)) {
 		assert.ok(offered.has(type), `${type} is mapped but not offered in the UI`);
 	}
 });
@@ -702,10 +702,9 @@ test('closing a test listen never touches the production connection', async () =
 	assert.equal(staticData.production.connectionId, 'web_PROD');
 });
 
-test('platform auth covers inline and choice-of-scheme shapes', () => {
-	// MANAGED declares its auth inline rather than by $ref; missing it sent the
-	// secret to webhook_secret_key, which the API rejects.
-	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.MANAGED, ['token']);
+test('platform auth covers inline, choice-of-scheme and no-secret types', () => {
+	// MANAGED declares its auth inline rather than by $ref.
+	assert.deepEqual(SOURCE_TYPE_AUTH.MANAGED, { kind: 'fields', fields: ['token'] });
 	const managed = buildSourceConfig.call(
 		fakeSourceConfigContext({ platformSecret: 'tok' }),
 		'MANAGED',
@@ -713,16 +712,26 @@ test('platform auth covers inline and choice-of-scheme shapes', () => {
 	);
 	assert.deepEqual(managed.auth, { token: 'tok' });
 
-	// HTTP accepts a choice of schemes, so one secret cannot say which applies.
-	assert.deepEqual(SOURCE_TYPE_AUTH_FIELDS.HTTP, []);
+	// A choice of schemes cannot be picked from one secret.
 	assert.throws(
 		() => buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'HTTP', {}),
+		/choice of verification schemes/,
+	);
+
+	// Types taking no secret need their own answer: telling someone to use
+	// Source Config (JSON) here would send them after a secret that does not exist.
+	assert.throws(
+		() => buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'AWS_SNS', {}),
 		(error) => {
-			assert.match(error.message, /choice of verification schemes/);
-			assert.match(error.description ?? '', /Source Config \(JSON\)/);
+			assert.match(error.message, /does not take a verification secret/);
+			assert.match(error.description ?? '', /Leave Webhook Secret empty/);
 			return true;
 		},
 	);
+
+	// And leaving it empty provisions cleanly.
+	const none = buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: '' }), 'AWS_SNS', {});
+	assert.deepEqual(none, {});
 });
 
 test('deleting a test registration leaves production untouched', async () => {
