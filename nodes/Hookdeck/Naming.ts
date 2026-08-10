@@ -47,6 +47,22 @@ export function isTestWebhookUrl(url: string): boolean {
 }
 
 /**
+ * Whether a registration belongs to an editor test listen rather than a
+ * published workflow.
+ *
+ * The execution mode is the authoritative signal — n8n reports `manual` only for
+ * a test listen — and unlike the URL it is unaffected by an instance renaming
+ * its test endpoint via `N8N_ENDPOINT_WEBHOOK_TEST`. The path check is kept as a
+ * fallback in case a deployment reports some other mode.
+ *
+ * Getting this wrong is expensive: a test run filed as production repoints the
+ * live connection at a URL that stops answering after 120 seconds.
+ */
+export function isTestRegistration(executionMode: string, webhookUrl: string): boolean {
+	return executionMode === 'manual' || isTestWebhookUrl(webhookUrl);
+}
+
+/**
  * Reasons Hookdeck could not deliver to a given n8n URL, or undefined if it can.
  *
  * Hookdeck delivers over the public internet, so it rejects any destination it

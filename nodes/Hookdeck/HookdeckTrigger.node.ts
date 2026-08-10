@@ -22,7 +22,12 @@ import {
 	verifySignature,
 } from './Delivery';
 import { HOOKDECK_DASHBOARD_URL, hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
-import { buildResourceName, describeUnreachableWebhookUrl, isTestWebhookUrl, sanitizeName } from './Naming';
+import {
+	buildResourceName,
+	describeUnreachableWebhookUrl,
+	isTestRegistration,
+	sanitizeName,
+} from './Naming';
 import { registrationFor } from './Registration';
 import type { HookdeckStaticData } from './Registration';
 import { triggerProperties } from './descriptions/TriggerProperties';
@@ -141,7 +146,10 @@ export class HookdeckTrigger implements INodeType {
 				const webhookUrl = this.getNodeWebhookUrl('default');
 				if (!webhookUrl) return false;
 
-				const registration = registrationFor(staticData, isTestWebhookUrl(webhookUrl));
+				const registration = registrationFor(
+					staticData,
+					isTestRegistration(this.getMode(), webhookUrl),
+				);
 				if (!registration.connectionId) return false;
 
 				let connection: IDataObject;
@@ -220,21 +228,7 @@ export class HookdeckTrigger implements INodeType {
 					});
 				}
 
-				const isTest = isTestWebhookUrl(webhookUrl);
-
-				// Test and production are told apart by the webhook path, which n8n
-				// lets an operator rename via N8N_ENDPOINT_WEBHOOK_TEST. If that has
-				// been changed, a test run would be filed as production and repoint
-				// the live connection at a URL that stops answering after 120 seconds.
-				// The execution mode is a second opinion: it cannot be used to decide
-				// on its own without risking the reverse mistake, but a disagreement is
-				// worth saying out loud.
-				if (!isTest && this.getMode() === 'manual') {
-					this.logger.warn(
-						'Hookdeck Trigger: this looks like a test run, but the webhook URL does not use the expected test path. If N8N_ENDPOINT_WEBHOOK_TEST has been customised, the test and production connections may be confused with each other.',
-					);
-				}
-
+				const isTest = isTestRegistration(this.getMode(), webhookUrl);
 				const registration = registrationFor(staticData, isTest);
 				const workflowId = this.getWorkflow().id ?? 'workflow';
 				const nodeId = this.getNode().id;
@@ -295,7 +289,7 @@ export class HookdeckTrigger implements INodeType {
 				// deregistering, so a lapsed test webhook never touches the production
 				// connection.
 				const webhookUrl = this.getNodeWebhookUrl('default');
-				const isTest = webhookUrl ? isTestWebhookUrl(webhookUrl) : false;
+				const isTest = webhookUrl ? isTestRegistration(this.getMode(), webhookUrl) : false;
 				const registration = registrationFor(staticData, isTest);
 				if (!registration.connectionId) return true;
 

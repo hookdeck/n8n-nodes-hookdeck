@@ -160,11 +160,6 @@ other hosts. Two parts of it work differently here, because n8n requires it:
   concurrency, so the equivalent lever here is the **Delivery Rate Limit**
   option, which caps delivery inside Hookdeck before n8n is reached.
 
-One further caveat: test and production registrations are told apart by n8n's
-webhook path. If your instance renames it via `N8N_ENDPOINT_WEBHOOK_TEST`, a test
-run can be filed as production; the node logs a warning when it detects that, but
-cannot correct for it.
-
 Destination authentication also uses `CUSTOM_SIGNATURE` rather than
 `HOOKDECK_SIGNATURE`. Hookdeck's project signing secret is not exposed through
 the API, so `HOOKDECK_SIGNATURE` would force you to copy a second secret by

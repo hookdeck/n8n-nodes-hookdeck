@@ -22,8 +22,18 @@ import {
 	verifySignature,
 } from '../dist/nodes/Hookdeck/Delivery.js';
 import {
+	buildDestinationConfig,
+	buildRules,
+	buildSourceConfig,
+} from '../dist/nodes/Hookdeck/ConnectionPayload.js';
+import {
+	hookdeckApiRequest,
+	hookdeckApiRequestAllItems,
+} from '../dist/nodes/Hookdeck/GenericFunctions.js';
+import {
 	buildResourceName,
 	describeUnreachableWebhookUrl,
+	isTestRegistration,
 	isTestWebhookUrl,
 	sanitizeName,
 } from '../dist/nodes/Hookdeck/Naming.js';
@@ -73,6 +83,22 @@ test('buildResourceName truncates without losing the -test suffix', () => {
 test('isTestWebhookUrl distinguishes the two n8n webhook URL forms', () => {
 	assert.equal(isTestWebhookUrl('https://n8n.example.com/webhook-test/abc'), true);
 	assert.equal(isTestWebhookUrl('https://n8n.example.com/webhook/abc'), false);
+});
+
+test('isTestRegistration trusts the execution mode over the URL path', () => {
+	// n8n reports 'manual' only for an editor test listen. Confirmed live: a test
+	// listen reports manual, an activation does not.
+	assert.equal(isTestRegistration('manual', 'https://n8n.example.com/webhook-test/abc'), true);
+	assert.equal(isTestRegistration('trigger', 'https://n8n.example.com/webhook/abc'), false);
+
+	// The point of using mode: an instance that renamed its test endpoint via
+	// N8N_ENDPOINT_WEBHOOK_TEST still classifies a test listen correctly, where
+	// the path check alone would file it as production and repoint the live
+	// connection at a URL that dies after 120 seconds.
+	assert.equal(isTestRegistration('manual', 'https://n8n.example.com/try-it/abc'), true);
+
+	// The path check remains as a fallback for any other mode value.
+	assert.equal(isTestRegistration('internal', 'https://n8n.example.com/webhook-test/abc'), true);
 });
 
 test('generateSigningSecret returns distinct high-entropy secrets', () => {
@@ -734,4 +760,528 @@ test('action node covers the documented resources and operations', () => {
 		assert.ok(operations, `no operations declared for ${resource}`);
 		assert.ok(operations.options.length > 0, `no operations listed for ${resource}`);
 	}
+});
+
+// ─── HTTP transport ───────────────────────────────────────────────────────────
+
+/** Stand-in for an n8n execution context, recording every request made. */
+function fakeApiContext(responses) {
+	const calls = [];
+	const queue = Array.isArray(responses) ? [...responses] : [responses];
+	return {
+		calls,
+		getNode: () => ({ name: 'Hookdeck' }),
+		logger: { debug() {}, warn() {}, error() {} },
+		helpers: {
+			httpRequestWithAuthentication(_cred, options) {
+				calls.push(options);
+				const next = queue.shift();
+				if (next instanceof Error) return Promise.reject(next);
+				return Promise.resolve(next);
+			},
+		},
+	};
+}
+
+test('hookdeckApiRequest returns the response body on success', async () => {
+	const ctx = fakeApiContext({ statusCode: 200, body: { id: 'src_1' } });
+	const result = await hookdeckApiRequest.call(ctx, 'GET', '/sources');
+
+	assert.deepEqual(result, { id: 'src_1' });
+	assert.equal(ctx.calls[0].url, 'https://api.hookdeck.com/2025-07-01/sources');
+	// Status handling is ours, so the helper must not throw on non-2xx itself.
+	assert.equal(ctx.calls[0].ignoreHttpStatusErrors, true);
+	assert.equal(ctx.calls[0].returnFullResponse, true);
+});
+
+test('hookdeckApiRequest normalises an empty body to an object', async () => {
+	// A 204 yields '' rather than an object; callers index the result regardless.
+	const ctx = fakeApiContext({ statusCode: 204, body: '' });
+	assert.deepEqual(await hookdeckApiRequest.call(ctx, 'DELETE', '/connections/web_1'), {});
+});
+
+test('hookdeckApiRequest omits empty body and query', async () => {
+	const ctx = fakeApiContext({ statusCode: 200, body: {} });
+	await hookdeckApiRequest.call(ctx, 'GET', '/sources');
+	assert.equal('body' in ctx.calls[0], false);
+	assert.equal('qs' in ctx.calls[0], false);
+});
+
+test('hookdeckApiRequest puts the API reason in the error message', async () => {
+	// n8n's activation path surfaces only error.message, so the detail has to be
+	// there rather than in the description alone.
+	const ctx = fakeApiContext({
+		statusCode: 422,
+		body: { message: 'Unprocessable', data: ['destination.config.url must be a valid uri'] },
+	});
+
+	await assert.rejects(
+		() => hookdeckApiRequest.call(ctx, 'PUT', '/connections'),
+		(error) => {
+			assert.match(error.message, /HTTP 422/);
+			assert.match(error.message, /PUT \/connections/);
+			assert.match(error.message, /Unprocessable/);
+			assert.equal(error.httpCode, '422');
+			return true;
+		},
+	);
+});
+
+test('hookdeckApiRequest reports per-field validation errors', async () => {
+	const ctx = fakeApiContext({
+		statusCode: 400,
+		body: { message: 'Invalid', errors: { name: 'must match pattern' } },
+	});
+	await assert.rejects(
+		() => hookdeckApiRequest.call(ctx, 'POST', '/sources'),
+		(error) => {
+			assert.match(error.message, /name: must match pattern/);
+			return true;
+		},
+	);
+});
+
+test('hookdeckApiRequest surfaces a transport failure', async () => {
+	const ctx = fakeApiContext(new Error('getaddrinfo ENOTFOUND api.hookdeck.com'));
+	await assert.rejects(
+		() => hookdeckApiRequest.call(ctx, 'GET', '/sources'),
+		(error) => {
+			// For transport-level failures NodeApiError substitutes its own wording
+			// and discards the message built here, so only the description carries
+			// the underlying cause. Asserted so a future change to that mapping is
+			// visible rather than silently swallowing the reason.
+			assert.match(error.message, /connection cannot be established/i);
+			assert.match(error.description ?? '', /ENOTFOUND/);
+			return true;
+		},
+	);
+});
+
+test('hookdeckApiRequestAllItems follows the pagination cursor', async () => {
+	const ctx = fakeApiContext([
+		{ statusCode: 200, body: { models: [{ id: 1 }, { id: 2 }], pagination: { next: 'cur_2' } } },
+		{ statusCode: 200, body: { models: [{ id: 3 }], pagination: {} } },
+	]);
+
+	const all = await hookdeckApiRequestAllItems.call(ctx, '/events');
+
+	assert.deepEqual(all.map((m) => m.id), [1, 2, 3]);
+	assert.equal(ctx.calls.length, 2);
+	assert.equal(ctx.calls[0].qs.next, undefined);
+	assert.equal(ctx.calls[1].qs.next, 'cur_2');
+});
+
+test('hookdeckApiRequestAllItems asks only for what the caller can use', async () => {
+	// "Get URL" wants one source; fetching a full page to discard the rest is waste.
+	const ctx = fakeApiContext({ statusCode: 200, body: { models: [{ id: 1 }], pagination: {} } });
+	await hookdeckApiRequestAllItems.call(ctx, '/sources', {}, 1);
+	assert.equal(ctx.calls[0].qs.limit, 1);
+
+	const unbounded = fakeApiContext({ statusCode: 200, body: { models: [], pagination: {} } });
+	await hookdeckApiRequestAllItems.call(unbounded, '/sources');
+	assert.equal(unbounded.calls[0].qs.limit, 250);
+});
+
+test('hookdeckApiRequestAllItems stops at the limit and does not over-return', async () => {
+	const ctx = fakeApiContext([
+		{ statusCode: 200, body: { models: [{ id: 1 }, { id: 2 }, { id: 3 }], pagination: { next: 'c' } } },
+	]);
+	const all = await hookdeckApiRequestAllItems.call(ctx, '/events', {}, 2);
+	assert.equal(all.length, 2);
+	// The cursor is not followed once the limit is met.
+	assert.equal(ctx.calls.length, 1);
+});
+
+// ─── Connection payload ───────────────────────────────────────────────────────
+
+function fakeSourceConfigContext(params) {
+	return {
+		getNode: () => ({ name: 'Hookdeck Trigger' }),
+		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),
+	};
+}
+
+test('buildSourceConfig emits the HMAC verification shape', () => {
+	const config = buildSourceConfig.call(
+		fakeSourceConfigContext({
+			verification: 'HMAC',
+			hmacSecret: 'shh',
+			hmacHeaderKey: 'x-signature',
+			hmacAlgorithm: 'sha256',
+			hmacEncoding: 'hex',
+		}),
+		'WEBHOOK',
+		{},
+	);
+
+	assert.equal(config.auth_type, 'HMAC');
+	// auth_type without a companion auth object is rejected by the API.
+	assert.deepEqual(config.auth, {
+		webhook_secret_key: 'shh',
+		header_key: 'x-signature',
+		algorithm: 'sha256',
+		encoding: 'hex',
+	});
+});
+
+test('buildSourceConfig emits API key and basic auth shapes', () => {
+	const apiKey = buildSourceConfig.call(
+		fakeSourceConfigContext({ verification: 'API_KEY', authHeaderName: 'x-api-key', apiKeyValue: 'k' }),
+		'WEBHOOK',
+		{},
+	);
+	assert.equal(apiKey.auth_type, 'API_KEY');
+	assert.deepEqual(apiKey.auth, { header_key: 'x-api-key', api_key: 'k' });
+
+	const basic = buildSourceConfig.call(
+		fakeSourceConfigContext({ verification: 'BASIC_AUTH', basicAuthUsername: 'u', basicAuthPassword: 'p' }),
+		'WEBHOOK',
+		{},
+	);
+	assert.equal(basic.auth_type, 'BASIC_AUTH');
+	assert.deepEqual(basic.auth, { username: 'u', password: 'p' });
+});
+
+test('buildSourceConfig sends no auth when verification is off', () => {
+	const config = buildSourceConfig.call(
+		fakeSourceConfigContext({ verification: 'none' }),
+		'WEBHOOK',
+		{},
+	);
+	assert.deepEqual(config, {});
+});
+
+test('buildSourceConfig puts a platform secret in that platform field', () => {
+	const stripe = buildSourceConfig.call(
+		fakeSourceConfigContext({ platformSecret: 'whsec_123' }),
+		'STRIPE',
+		{},
+	);
+	assert.deepEqual(stripe, { auth_type: 'STRIPE', auth: { webhook_secret_key: 'whsec_123' } });
+
+	// GitLab names it api_key; the same secret in webhook_secret_key is rejected.
+	const gitlab = buildSourceConfig.call(
+		fakeSourceConfigContext({ platformSecret: 'tok' }),
+		'GITLAB',
+		{},
+	);
+	assert.deepEqual(gitlab, { auth_type: 'GITLAB', auth: { api_key: 'tok' } });
+});
+
+test('buildSourceConfig refuses platforms needing more than one value', () => {
+	assert.throws(
+		() =>
+			buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'POSTMARK', {}),
+		(error) => {
+			assert.match(error.message, /more than one value/);
+			// The message has to name the fields, or it is not actionable.
+			assert.match(error.description ?? '', /username/);
+			assert.match(error.description ?? '', /password/);
+			return true;
+		},
+	);
+});
+
+test('buildSourceConfig lets Source Config JSON override the fields above', () => {
+	const config = buildSourceConfig.call(
+		fakeSourceConfigContext({ platformSecret: 'ignored' }),
+		'STRIPE',
+		{ sourceConfigJson: '{"auth_type":"STRIPE","auth":{"webhook_secret_key":"override"}}' },
+	);
+	assert.deepEqual(config.auth, { webhook_secret_key: 'override' });
+});
+
+test('buildSourceConfig rejects malformed Source Config JSON', () => {
+	assert.throws(
+		() =>
+			buildSourceConfig.call(fakeSourceConfigContext({ verification: 'none' }), 'WEBHOOK', {
+				sourceConfigJson: '{not json',
+			}),
+		/not valid JSON/,
+	);
+});
+
+test('buildRules applies retry and dedup defaults without any options set', () => {
+	const rules = buildRules({});
+	const retry = rules.find((r) => r.type === 'retry');
+	assert.equal(retry.count, 5);
+	assert.equal(retry.strategy, 'exponential');
+	// Server errors and rate limiting must stay retryable.
+	assert.deepEqual(retry.response_status_codes, ['500-599', '429']);
+	assert.ok(rules.some((r) => r.type === 'deduplicate'));
+});
+
+test('buildRules honours explicit options, including turning rules off', () => {
+	const rules = buildRules({ retryCount: 0, deduplicateWindow: 0 });
+	assert.equal(rules.length, 0);
+
+	const custom = buildRules({ retryCount: 12, retryStrategy: 'linear', retryInterval: 5000 });
+	const retry = custom.find((r) => r.type === 'retry');
+	assert.equal(retry.count, 12);
+	assert.equal(retry.strategy, 'linear');
+	assert.equal(retry.interval, 5000);
+});
+
+test('buildDestinationConfig disables path forwarding and signs deliveries', () => {
+	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 'sekret', {});
+	assert.equal(config.path_forwarding_disabled, true);
+	assert.equal(config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.deepEqual(config.auth, { key: SIGNATURE_HEADER, signing_secret: 'sekret' });
+});
+
+test('buildDestinationConfig maps rate limiting and delivery groups', () => {
+	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 's', {
+		rateLimit: 10,
+		rateLimitPeriod: 'concurrent',
+		deliveryGroupKey: 'body.customer_id',
+	});
+	assert.equal(config.rate_limit, 10);
+	assert.equal(config.rate_limit_period, 'concurrent');
+	// delivery_groups is a single object, not an array, and cannot use 'concurrent'.
+	assert.equal(Array.isArray(config.delivery_groups), false);
+	assert.equal(config.delivery_groups.key, 'body.customer_id');
+	assert.notEqual(config.delivery_groups.rate_limit_period, 'concurrent');
+});
+
+// ─── Action node routing ──────────────────────────────────────────────────────
+
+/** Drive the action node's execute() and record the HTTP calls it makes. */
+async function runAction(params, responseBody = { ok: true }) {
+	const calls = [];
+	const ctx = {
+		getInputData: () => [{ json: {} }],
+		continueOnFail: () => false,
+		getNode: () => ({ name: 'Hookdeck' }),
+		logger: { debug() {}, warn() {}, error() {} },
+		getNodeParameter: (name, _i, fallback) => (name in params ? params[name] : fallback),
+		helpers: {
+			httpRequestWithAuthentication(_cred, options) {
+				calls.push({ method: options.method, url: options.url, body: options.body });
+				return Promise.resolve({ statusCode: 200, body: responseBody });
+			},
+		},
+	};
+	const output = await new Hookdeck().execute.call(ctx);
+	return { calls, output };
+}
+
+test('action node routes each operation to the right method and path', async () => {
+	const get = await runAction({ resource: 'event', operation: 'get', id: 'evt_1' });
+	assert.equal(get.calls[0].method, 'GET');
+	assert.match(get.calls[0].url, /\/events\/evt_1$/);
+
+	// Events retry via POST; connection state changes are PUT.
+	const retry = await runAction({ resource: 'event', operation: 'retry', id: 'evt_1' });
+	assert.equal(retry.calls[0].method, 'POST');
+	assert.match(retry.calls[0].url, /\/events\/evt_1\/retry$/);
+
+	const pause = await runAction({ resource: 'connection', operation: 'pause', id: 'web_1' });
+	assert.equal(pause.calls[0].method, 'PUT');
+	assert.match(pause.calls[0].url, /\/connections\/web_1\/pause$/);
+
+	const del = await runAction({ resource: 'connection', operation: 'delete', id: 'web_1' });
+	assert.equal(del.calls[0].method, 'DELETE');
+	assert.match(del.calls[0].url, /\/connections\/web_1$/);
+});
+
+test('action node sends issue status changes as a PUT body', async () => {
+	const update = await runAction({
+		resource: 'issue',
+		operation: 'update',
+		id: 'iss_1',
+		status: 'ACKNOWLEDGED',
+	});
+	assert.equal(update.calls[0].method, 'PUT');
+	assert.deepEqual(update.calls[0].body, { status: 'ACKNOWLEDGED' });
+
+	// Hookdeck models "dismissed" as the IGNORED status.
+	const dismiss = await runAction({ resource: 'issue', operation: 'dismiss', id: 'iss_1' });
+	assert.deepEqual(dismiss.calls[0].body, { status: 'IGNORED' });
+});
+
+test('action node returns list items rather than the envelope', async () => {
+	const { output } = await runAction(
+		{ resource: 'event', operation: 'getAll', returnAll: true, filters: {} },
+		{ models: [{ id: 'evt_1' }, { id: 'evt_2' }], pagination: {} },
+	);
+	assert.deepEqual(output[0].map((item) => item.json.id), ['evt_1', 'evt_2']);
+	// Lineage back to the input item must survive.
+	assert.deepEqual(output[0][0].pairedItem, { item: 0 });
+});
+
+test('action node explains a Get URL miss instead of returning nothing', async () => {
+	await assert.rejects(
+		() =>
+			runAction({ resource: 'source', operation: 'getUrl', name: 'My Source' }, {
+				models: [],
+				pagination: {},
+			}),
+		(error) => {
+			assert.match(error.message, /No Hookdeck source named "My Source"/);
+			// The name is normalised before lookup, so say what was actually searched.
+			assert.match(error.message, /My-Source/);
+			return true;
+		},
+	);
+});
+
+test('action node returns the source URL for Get URL', async () => {
+	const { output } = await runAction(
+		{ resource: 'source', operation: 'getUrl', name: 'n8n-verify' },
+		{ models: [{ id: 'src_1', name: 'n8n-verify', url: 'https://hkdk.events/abc' }], pagination: {} },
+	);
+	assert.equal(output[0][0].json.url, 'https://hkdk.events/abc');
+});
+
+test('action node rejects an unknown resource', async () => {
+	await assert.rejects(
+		() => runAction({ resource: 'nonsense', operation: 'get', id: 'x' }),
+		/Unknown resource/,
+	);
+});
+
+// ─── Webhook handler ──────────────────────────────────────────────────────────
+
+/** Drive webhook() and capture whatever response it writes directly. */
+function fakeWebhookContext({ body, headers = {}, staticData, options = {} }) {
+	const sent = {};
+	return {
+		sent,
+		getWorkflowStaticData: () => staticData,
+		getNodeParameter: (name, fallback) => (name === 'options' ? options : fallback),
+		getRequestObject: () => ({ rawBody: body }),
+		getHeaderData: () => headers,
+		getQueryData: () => ({ foo: 'bar' }),
+		getBodyData: () => JSON.parse(body.toString('utf8')),
+		getResponseObject: () => ({
+			status(code) {
+				sent.status = code;
+				return { json: (payload) => { sent.body = payload; } };
+			},
+		}),
+		getNode: () => ({ name: 'Hookdeck Trigger' }),
+		logger: { debug() {}, warn(message) { sent.warned = message; }, error() {} },
+		helpers: { returnJsonArray: (items) => [].concat(items).map((json) => ({ json })) },
+	};
+}
+
+const WEBHOOK_SECRET = 'sekret';
+function sign(body) {
+	return createHmac('sha256', WEBHOOK_SECRET).update(body).digest('base64');
+}
+
+test('webhook accepts a signed delivery and exposes body, query and metadata', async () => {
+	const body = Buffer.from('{"event":"payment.succeeded"}');
+	const ctx = fakeWebhookContext({
+		body,
+		headers: {
+			'content-type': 'application/json',
+			[SIGNATURE_HEADER]: sign(body),
+			'x-hookdeck-eventid': 'evt_1',
+			'x-hookdeck-attempt-count': '2',
+		},
+		staticData: { production: { signingSecret: WEBHOOK_SECRET } },
+	});
+
+	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const item = result.workflowData[0][0].json;
+
+	assert.equal(item.body.event, 'payment.succeeded');
+	assert.deepEqual(item.query, { foo: 'bar' });
+	assert.equal(item.hookdeck.eventId, 'evt_1');
+	assert.equal(item.hookdeck.attemptCount, 2);
+	// No will-retry-after means Hookdeck is done trying: the dead-letter signal.
+	assert.equal(item.hookdeck.isLastAttempt, true);
+});
+
+test('webhook rejects an unsigned or mis-signed delivery with 401', async () => {
+	const body = Buffer.from('{"forged":true}');
+	for (const headers of [
+		{ 'content-type': 'application/json' },
+		{ 'content-type': 'application/json', [SIGNATURE_HEADER]: 'AAAAdeadbeef' },
+	]) {
+		const ctx = fakeWebhookContext({
+			body,
+			headers,
+			staticData: { production: { signingSecret: WEBHOOK_SECRET } },
+		});
+		const result = await new HookdeckTrigger().webhook.call(ctx);
+
+		assert.equal(ctx.sent.status, 401);
+		// The workflow must not run.
+		assert.equal(result.noWebhookResponse, true);
+		assert.equal(result.workflowData, undefined);
+	}
+});
+
+test('webhook accepts either the test or production secret', async () => {
+	// A delivery does not say which registration it belongs to, and both are ours.
+	const body = Buffer.from('{"a":1}');
+	const ctx = fakeWebhookContext({
+		body,
+		headers: { 'content-type': 'application/json', [SIGNATURE_HEADER]: sign(body) },
+		staticData: { production: { signingSecret: 'other' }, test: { signingSecret: WEBHOOK_SECRET } },
+	});
+	const result = await new HookdeckTrigger().webhook.call(ctx);
+	assert.ok(result.workflowData);
+});
+
+test('webhook says why it is rejecting when no secret is stored', async () => {
+	// Static data does not survive an export/import; without this the cause of a
+	// permanent 401 is invisible.
+	const body = Buffer.from('{"a":1}');
+	const ctx = fakeWebhookContext({
+		body,
+		headers: { 'content-type': 'application/json', [SIGNATURE_HEADER]: sign(body) },
+		staticData: {},
+	});
+
+	await new HookdeckTrigger().webhook.call(ctx);
+	assert.equal(ctx.sent.status, 401);
+	assert.match(ctx.sent.warned ?? '', /no signing secret is stored/);
+});
+
+test('webhook rejects a malformed text body with 400, not 401', async () => {
+	// 400 sits outside the retry rule, so a malformed body fails once rather than
+	// consuming every attempt.
+	const body = Buffer.concat([Buffer.from('{"n":"'), Buffer.from([0xc3, 0x28]), Buffer.from('"}')]);
+	const ctx = fakeWebhookContext({
+		body,
+		headers: { 'content-type': 'application/json', [SIGNATURE_HEADER]: sign(body) },
+		staticData: { production: { signingSecret: WEBHOOK_SECRET } },
+	});
+
+	const result = await new HookdeckTrigger().webhook.call(ctx);
+	assert.equal(ctx.sent.status, 400);
+	assert.match(ctx.sent.body.message, /not valid UTF-8/);
+	assert.equal(result.noWebhookResponse, true);
+});
+
+test('webhook lets a binary body through untouched', async () => {
+	// A binary payload is legitimately not UTF-8; rejecting it would make that
+	// provider permanently undeliverable.
+	const body = Buffer.from([0x1f, 0x8b, 0x08, 0x00, 0xc3, 0x28]);
+	const ctx = fakeWebhookContext({
+		body,
+		headers: { 'content-type': 'application/gzip', [SIGNATURE_HEADER]: sign(body) },
+		staticData: { production: { signingSecret: WEBHOOK_SECRET } },
+	});
+	ctx.getBodyData = () => ({ binary: true });
+
+	const result = await new HookdeckTrigger().webhook.call(ctx);
+	assert.equal(ctx.sent.status, undefined, 'should not have written a rejection');
+	assert.ok(result.workflowData);
+});
+
+test('webhook can be run with verification turned off', async () => {
+	const body = Buffer.from('{"a":1}');
+	const ctx = fakeWebhookContext({
+		body,
+		headers: { 'content-type': 'application/json' },
+		staticData: {},
+		options: { verifySignature: false },
+	});
+	const result = await new HookdeckTrigger().webhook.call(ctx);
+	assert.ok(result.workflowData);
+	assert.equal(ctx.sent.status, undefined);
 });
