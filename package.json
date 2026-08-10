@@ -1,0 +1,57 @@
+{
+	"name": "@hookdeck/n8n-nodes-hookdeck",
+	"version": "0.1.0",
+	"description": "Use the Hookdeck Event Gateway from n8n: manage sources, destinations and connections, and trigger workflows from events Hookdeck delivers",
+	"license": "MIT",
+	"homepage": "https://hookdeck.com",
+	"keywords": [
+		"n8n-community-node-package",
+		"hookdeck",
+		"webhook",
+		"event-gateway"
+	],
+	"author": {
+		"name": "Hookdeck",
+		"email": "support@hookdeck.com"
+	},
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/hookdeck/n8n-nodes-hookdeck.git"
+	},
+	"scripts": {
+		"build": "n8n-node build",
+		"build:watch": "tsc --watch",
+		"dev": "n8n-node dev",
+		"lint": "n8n-node lint",
+		"lint:fix": "n8n-node lint --fix",
+		"scan": "node scripts/verification-scan.mjs",
+		"test": "npm run build && node --test \"test/**/*.test.mjs\"",
+		"release": "n8n-node release",
+		"prepublishOnly": "n8n-node prerelease"
+	},
+	"files": [
+		"dist"
+	],
+	"n8n": {
+		"n8nNodesApiVersion": 1,
+		"strict": true,
+		"credentials": [
+			"dist/credentials/HookdeckApi.credentials.js"
+		],
+		"nodes": [
+			"dist/nodes/Hookdeck/Hookdeck.node.js",
+			"dist/nodes/Hookdeck/HookdeckTrigger.node.js"
+		]
+	},
+	"devDependencies": {
+		"@n8n/node-cli": "*",
+		"@n8n/scan-community-package": "^0.31.0",
+		"eslint": "9.32.0",
+		"prettier": "3.6.2",
+		"release-it": "^19.0.4",
+		"typescript": "5.9.2"
+	},
+	"peerDependencies": {
+		"n8n-workflow": "*"
+	}
+}

@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+# Cancel in-progress runs for the same branch/PR to avoid wasting CI minutes.
+concurrency:
+  group: ci-$
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: 'npm ci'
+
+      - name: Run lint
+        run: 'npm run lint'
+
+      - name: Run build
+        run: 'npm run build'
+
+      # The same rule set n8n runs when reviewing a package for verification.
+      # Run it on every change so a verification blocker surfaces here rather
+      # than weeks into the review queue.
+      - name: Run n8n verification scan
+        run: 'npm run scan'
+
+      - name: Run tests
+        run: 'node --test "test/**/*.test.mjs"'

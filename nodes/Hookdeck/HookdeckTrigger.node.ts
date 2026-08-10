@@ -1,0 +1,395 @@
+import type {
+	IDataObject,
+	IHookFunctions,
+	ILoadOptionsFunctions,
+	INodeListSearchItems,
+	INodeListSearchResult,
+	INodeType,
+	INodeTypeDescription,
+	IWebhookFunctions,
+	IWebhookResponseData,
+} from 'n8n-workflow';
+import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
+
+import { buildDestinationConfig, buildRules, buildSourceConfig } from './ConnectionPayload';
+import {
+	DEFAULT_HEADER_PREFIX,
+	SIGNATURE_HEADER,
+	extractDeliveryMetadata,
+	generateSigningSecret,
+	isValidUtf8,
+	verifySignature,
+} from './Delivery';
+import { HOOKDECK_DASHBOARD_URL, hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
+import { buildResourceName, describeUnreachableWebhookUrl, isTestWebhookUrl, sanitizeName } from './Naming';
+import { registrationFor } from './Registration';
+import type { HookdeckStaticData } from './Registration';
+import { triggerProperties } from './descriptions/TriggerProperties';
+
+export class HookdeckTrigger implements INodeType {
+	description: INodeTypeDescription = {
+		displayName: 'Hookdeck Trigger',
+		name: 'hookdeckTrigger',
+		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
+		group: ['trigger'],
+		version: 1,
+		subtitle: '={{$parameter["source"]["value"] || $parameter["source"]}}',
+		description: 'Starts a workflow when Hookdeck delivers an event',
+		// `eventTriggerDescription` is deliberately unset: n8n substitutes its own
+		// "Go to Hookdeck and create an event" for webhook triggers and ignores
+		// whatever is set here, so anything put in it never reaches the user.
+		activationMessage:
+			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider.',
+		defaults: {
+			name: 'Hookdeck Trigger',
+		},
+		inputs: [],
+		outputs: [NodeConnectionTypes.Main],
+		// The property only accepts `true`, and the linter requires it to be set.
+		// Harmless here: a trigger has no main input, so it is never offered to an
+		// AI agent as a tool.
+		usableAsTool: true,
+		credentials: [
+			{
+				name: 'hookdeckApi',
+				required: true,
+			},
+		],
+		webhooks: [
+			{
+				name: 'default',
+				httpMethod: 'POST',
+				// `sync` holds the HTTP response until the workflow finishes so a
+				// failure answers 5xx and Hookdeck's retry rules take over.
+				// `async_retry` acknowledges on receipt.
+				responseMode: '={{$parameter["ackMode"] === "sync" ? "lastNode" : "onReceived"}}',
+				path: 'webhook',
+				// Hide n8n's own webhook URL. It is an internal detail here — the
+				// address to give a provider is the Hookdeck source URL. Showing it
+				// invites pasting it into Stripe or GitHub, which bypasses the gateway
+				// and silently loses the verification, queueing and retries that are
+				// the entire point of this node.
+				ndvHideUrl: true,
+			},
+		],
+		properties: triggerProperties,
+	};
+
+	methods = {
+		listSearch: {
+			/**
+			 * List the project's sources, labelled with the public URL.
+			 *
+			 * That URL is the whole point of the node — it is what gets pasted into
+			 * Stripe or GitHub — and it is only knowable after the source exists.
+			 * Surfacing it here means setup finishes in the canvas instead of
+			 * requiring a second node or a trip to the dashboard.
+			 */
+			async searchSources(
+				this: ILoadOptionsFunctions,
+				filter?: string,
+			): Promise<INodeListSearchResult> {
+				const sources = await hookdeckApiRequestAllItems.call(this, '/sources', {}, 200);
+
+				const results: INodeListSearchItems[] = sources
+					.map((source) => {
+						const sourceName = (source.name as string) ?? '';
+						const url = source.url as string | undefined;
+						const id = source.id as string | undefined;
+						return {
+							// The URL goes in the label, not `description` or `url`:
+							// n8n's resource locator list renders neither, so anywhere else
+							// it would be invisible — and showing it is the whole point.
+							// It also stays on screen after selection, as the cached label.
+							name: url ? `${sourceName} — ${url}` : sourceName,
+							value: sourceName,
+							// n8n turns this into an "open" link beside the field, so it must
+							// be somewhere worth opening. Emphatically not the ingest URL:
+							// a browser GET against that is rejected (405), and pointing a
+							// link at your own webhook endpoint invites firing requests at
+							// it by accident. The dashboard page has a copy button.
+							url: id ? `${HOOKDECK_DASHBOARD_URL}/sources/${id}` : undefined,
+						};
+					})
+					.filter((item) =>
+						filter ? item.value.toLowerCase().includes(filter.toLowerCase()) : true,
+					)
+					.sort((a, b) => a.value.localeCompare(b.value));
+
+				return { results };
+			},
+		},
+	};
+
+	webhookMethods = {
+		default: {
+			/**
+			 * Decide whether the Hookdeck connection this node provisioned is still
+			 * usable. Returning false makes n8n call `create()`.
+			 */
+			async checkExists(this: IHookFunctions): Promise<boolean> {
+				const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
+
+				const webhookUrl = this.getNodeWebhookUrl('default');
+				if (!webhookUrl) return false;
+
+				const registration = registrationFor(staticData, isTestWebhookUrl(webhookUrl));
+				if (!registration.connectionId) return false;
+
+				let connection: IDataObject;
+				try {
+					connection = await hookdeckApiRequest.call(
+						this,
+						'GET',
+						`/connections/${registration.connectionId}`,
+					);
+				} catch (error) {
+					// Deleted in the Hookdeck dashboard, or belongs to another project
+					// now that the credential changed. Either way, reprovision — but say
+					// so, because a persistent failure here means every activation
+					// silently recreates the connection.
+					this.logger.debug(
+						`Hookdeck connection ${registration.connectionId} could not be fetched, reprovisioning: ${
+							(error as Error).message
+						}`,
+					);
+					return false;
+				}
+
+				// Re-point the connection if this n8n instance moved host or path.
+				// Without this check a relocated instance would keep a connection
+				// delivering to an address that no longer exists.
+				const destination = connection.destination as IDataObject | undefined;
+				const config = destination?.config as IDataObject | undefined;
+				if (config?.url !== webhookUrl) return false;
+
+				// A disabled or paused connection does not deliver. Returning false
+				// sends this through `create`, which upserts and then unpauses —
+				// which is exactly what has to happen when the previous deactivation
+				// paused the connection and queued events are waiting on it.
+				if (connection.disabled_at || connection.paused_at) return false;
+
+				return true;
+			},
+
+			/**
+			 * Provision the Hookdeck connection that fronts this workflow.
+			 *
+			 * One idempotent upsert creates the source, the destination and the
+			 * connection together, and returns the public source URL.
+			 */
+			async create(this: IHookFunctions): Promise<boolean> {
+				const webhookUrl = this.getNodeWebhookUrl('default');
+				if (!webhookUrl) {
+					throw new NodeOperationError(this.getNode(), 'Could not resolve the n8n webhook URL');
+				}
+
+				const unreachable = describeUnreachableWebhookUrl(webhookUrl);
+				if (unreachable) {
+					throw new NodeOperationError(
+						this.getNode(),
+						`Hookdeck cannot deliver to this n8n instance. ${unreachable}`,
+						{
+							description:
+								'Give n8n a publicly reachable address and set the WEBHOOK_URL environment variable to it, then activate again. For local development, expose n8n through a tunnel and point WEBHOOK_URL at the tunnel URL.',
+						},
+					);
+				}
+
+				const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
+				// extractValue collapses either resource locator mode to the source name.
+				const sourceNameRaw = this.getNodeParameter('source', undefined, {
+					extractValue: true,
+				}) as string;
+				const sourceType = this.getNodeParameter('sourceType') as string;
+				const options = this.getNodeParameter('options', {}) as IDataObject;
+
+				const sourceName = sanitizeName(sourceNameRaw).slice(0, 155);
+				if (!sourceName) {
+					throw new NodeOperationError(this.getNode(), 'Source Name must not be empty', {
+						description:
+							'Use letters, numbers, hyphens or underscores — other characters are removed.',
+					});
+				}
+
+				const isTest = isTestWebhookUrl(webhookUrl);
+				const registration = registrationFor(staticData, isTest);
+				const workflowId = this.getWorkflow().id ?? 'workflow';
+				const nodeId = this.getNode().id;
+
+				// Reuse the stored secret when there is one, so a re-provision caused by
+				// a moved URL does not invalidate signatures mid-flight.
+				const signingSecret = registration.signingSecret ?? generateSigningSecret();
+
+				const body: IDataObject = {
+					name: buildResourceName('n8n', workflowId, nodeId, isTest),
+					source: {
+						name: sourceName,
+						type: sourceType,
+						config: buildSourceConfig.call(this, sourceType, options),
+					},
+					destination: {
+						name: buildResourceName('n8n-dest', workflowId, nodeId, isTest),
+						type: 'HTTP',
+						config: buildDestinationConfig(webhookUrl, signingSecret, options),
+					},
+					rules: buildRules(options),
+				};
+
+				const connection = await hookdeckApiRequest.call(this, 'PUT', '/connections', body);
+
+				// A previous deactivation may have paused this connection, holding
+				// events. Unpausing releases them to the reactivated workflow.
+				if (connection.paused_at) {
+					await hookdeckApiRequest.call(this, 'PUT', `/connections/${connection.id}/unpause`);
+				}
+
+				const source = connection.source as IDataObject | undefined;
+				registration.connectionId = connection.id as string;
+				registration.sourceId = source?.id as string;
+				registration.sourceUrl = source?.url as string;
+				registration.signingSecret = signingSecret;
+				registration.destinationUrl = webhookUrl;
+
+				return true;
+			},
+
+			/**
+			 * Stand the connection down on deactivation.
+			 *
+			 * Pausing is the default because deleting a connection cancels every
+			 * event still queued for it, irrecoverably — which is exactly the loss
+			 * this node exists to prevent when a workflow is deactivated for a
+			 * deploy. A paused connection holds events and delivers them on
+			 * reactivation.
+			 *
+			 * The source and destination are left in place either way: a source may
+			 * be shared with other connections, and removing it would break them.
+			 */
+			async delete(this: IHookFunctions): Promise<boolean> {
+				const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
+
+				// Which registration this call refers to is decided by the URL n8n is
+				// deregistering, so a lapsed test webhook never touches the production
+				// connection.
+				const webhookUrl = this.getNodeWebhookUrl('default');
+				const isTest = webhookUrl ? isTestWebhookUrl(webhookUrl) : false;
+				const registration = registrationFor(staticData, isTest);
+				if (!registration.connectionId) return true;
+
+				const options = this.getNodeParameter('options', {}) as IDataObject;
+				// A test registration is always torn down completely: its connection
+				// points at a URL that stops answering after 120 seconds, so pausing it
+				// would leave a permanently broken connection behind.
+				const onDeactivate = isTest ? 'delete' : ((options.onDeactivate as string) ?? 'pause');
+
+				if (onDeactivate === 'pause') {
+					await hookdeckApiRequest.call(
+						this,
+						'PUT',
+						`/connections/${registration.connectionId}/pause`,
+					);
+					// Static data is kept so the next activation finds and unpauses this
+					// same connection rather than provisioning a second one.
+					return true;
+				}
+
+				try {
+					await hookdeckApiRequest.call(
+						this,
+						'DELETE',
+						`/connections/${registration.connectionId}`,
+					);
+				} catch (error) {
+					// Already gone is success. Anything else is surfaced, because a
+					// connection left delivering to a deactivated workflow is exactly the
+					// silent failure this node exists to avoid.
+					const statusCode = (error as { httpCode?: string }).httpCode;
+					if (statusCode !== '404') {
+						throw new NodeApiError(this.getNode(), error as never);
+					}
+				}
+
+				delete staticData[isTest ? 'test' : 'production'];
+
+				return true;
+			},
+		},
+	};
+
+	async webhook(this: IWebhookFunctions): Promise<IWebhookResponseData> {
+		const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
+		const options = this.getNodeParameter('options', {}) as IDataObject;
+		const shouldVerify = (options.verifySignature as boolean) ?? true;
+
+		const request = this.getRequestObject();
+		const rawBody = (request as unknown as { rawBody?: Buffer | string }).rawBody;
+
+		if (shouldVerify) {
+			if (rawBody === undefined) {
+				throw new NodeOperationError(
+					this.getNode(),
+					'Cannot verify the Hookdeck signature: this n8n instance did not expose the raw request body',
+					{
+						description:
+							'Turn off "Verify Signature" under Options to accept deliveries without checking the signature.',
+					},
+				);
+			}
+
+			const headers = this.getHeaderData() as Record<string, string | undefined>;
+			const signature = headers[SIGNATURE_HEADER];
+
+			// A delivery does not say whether it belongs to the test or production
+			// registration, and each has its own secret. Both are this node's own,
+			// so accepting either is correct — and checking only one would reject
+			// valid test deliveries while a workflow is also running in production.
+			//
+			// Verified against the raw bytes, never a decoded string — see
+			// verifySignature for why decoding first would reject valid payloads.
+			const secrets = [staticData.production?.signingSecret, staticData.test?.signingSecret]
+				// The pre-split layout kept a single secret at the top level.
+				.concat(staticData.signingSecret)
+				.filter((secret): secret is string => typeof secret === 'string' && secret.length > 0);
+
+			const verified = secrets.some((secret) => verifySignature(rawBody, signature, secret));
+
+			if (!verified) {
+				const response = this.getResponseObject();
+				response.status(401).json({ message: 'Invalid signature' });
+				return { noWebhookResponse: true };
+			}
+		}
+
+		// A valid signature proves the bytes are authentic, not that they are
+		// readable. Invalid UTF-8 inside a JSON string still parses in Node, so
+		// the workflow would receive silently corrupted text. Reject instead.
+		//
+		// 400 is deliberate: it sits outside the retry rule's 500-599/429 range,
+		// so a malformed body fails once rather than burning every retry.
+		if (Buffer.isBuffer(rawBody) && !isValidUtf8(rawBody)) {
+			const response = this.getResponseObject();
+			response.status(400).json({ message: 'Request body is not valid UTF-8' });
+			return { noWebhookResponse: true };
+		}
+
+		// Surface Hookdeck's delivery metadata alongside the payload. Without it a
+		// workflow cannot tell a first attempt from a fifth, spot the last attempt
+		// before an event is abandoned, or deduplicate on the event ID.
+		const metadata = extractDeliveryMetadata(
+			this.getHeaderData() as Record<string, string | string[] | undefined>,
+			(options.headerPrefix as string) ?? DEFAULT_HEADER_PREFIX,
+		);
+
+		return {
+			workflowData: [
+				this.helpers.returnJsonArray({
+					body: this.getBodyData(),
+					headers: this.getHeaderData() as IDataObject,
+					query: this.getQueryData() as IDataObject,
+					hookdeck: metadata as unknown as IDataObject,
+				}),
+			],
+		};
+	}
+}
