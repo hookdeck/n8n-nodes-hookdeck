@@ -41,6 +41,9 @@ export class HookdeckApi implements ICredentialType {
 
 	test: ICredentialTestRequest = {
 		request: {
+			// Kept in step with HOOKDECK_BASE_URL in nodes/Hookdeck/GenericFunctions.ts.
+			// Credentials are loaded independently of the nodes, so this cannot import
+			// it — an API version bump has to change both.
 			baseURL: 'https://api.hookdeck.com/2025-07-01',
 			url: '/sources',
 			method: 'GET',

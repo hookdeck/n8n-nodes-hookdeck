@@ -88,6 +88,9 @@ export function describeUnreachableWebhookUrl(webhookUrl: string): string | unde
 		/^192\.168\./.test(host) ||
 		/^172\.(1[6-9]|2\d|3[01])\./.test(host) ||
 		/^169\.254\./.test(host) ||
+		// CGNAT 100.64.0.0/10, which is what Tailscale hands out — a common way to
+		// reach a self-hosted n8n, and not routable from Hookdeck.
+		/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(host) ||
 		isPrivateIpv6 ||
 		host.endsWith('.local');
 

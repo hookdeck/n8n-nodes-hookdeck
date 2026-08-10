@@ -15,6 +15,7 @@ import { buildDestinationConfig, buildRules, buildSourceConfig } from './Connect
 import {
 	DEFAULT_HEADER_PREFIX,
 	SIGNATURE_HEADER,
+	expectsUtf8,
 	extractDeliveryMetadata,
 	generateSigningSecret,
 	isValidUtf8,
@@ -25,6 +26,9 @@ import { buildResourceName, describeUnreachableWebhookUrl, isTestWebhookUrl, san
 import { registrationFor } from './Registration';
 import type { HookdeckStaticData } from './Registration';
 import { triggerProperties } from './descriptions/TriggerProperties';
+
+/** How many sources to show when the list is opened without a search term. */
+const BROWSE_SOURCE_LIMIT = 250;
 
 export class HookdeckTrigger implements INodeType {
 	description: INodeTypeDescription = {
@@ -89,7 +93,11 @@ export class HookdeckTrigger implements INodeType {
 				this: ILoadOptionsFunctions,
 				filter?: string,
 			): Promise<INodeListSearchResult> {
-				const sources = await hookdeckApiRequestAllItems.call(this, '/sources', {}, 200);
+				// Matching happens here rather than server-side, so a cap while
+				// searching would hide sources the user explicitly asked for. Browsing
+				// stays bounded; searching does not.
+				const limit = filter ? undefined : BROWSE_SOURCE_LIMIT;
+				const sources = await hookdeckApiRequestAllItems.call(this, '/sources', {}, limit);
 
 				const results: INodeListSearchItems[] = sources
 					.map((source) => {
@@ -213,6 +221,20 @@ export class HookdeckTrigger implements INodeType {
 				}
 
 				const isTest = isTestWebhookUrl(webhookUrl);
+
+				// Test and production are told apart by the webhook path, which n8n
+				// lets an operator rename via N8N_ENDPOINT_WEBHOOK_TEST. If that has
+				// been changed, a test run would be filed as production and repoint
+				// the live connection at a URL that stops answering after 120 seconds.
+				// The execution mode is a second opinion: it cannot be used to decide
+				// on its own without risking the reverse mistake, but a disagreement is
+				// worth saying out loud.
+				if (!isTest && this.getMode() === 'manual') {
+					this.logger.warn(
+						'Hookdeck Trigger: this looks like a test run, but the webhook URL does not use the expected test path. If N8N_ENDPOINT_WEBHOOK_TEST has been customised, the test and production connections may be confused with each other.',
+					);
+				}
+
 				const registration = registrationFor(staticData, isTest);
 				const workflowId = this.getWorkflow().id ?? 'workflow';
 				const nodeId = this.getNode().id;
@@ -306,6 +328,10 @@ export class HookdeckTrigger implements INodeType {
 					// silent failure this node exists to avoid.
 					const statusCode = (error as { httpCode?: string }).httpCode;
 					if (statusCode !== '404') {
+						// Looks redundant — the error is already a NodeApiError and the
+						// constructor returns it unchanged. It stays because a bare
+						// `throw error` fails the `require-node-api-error` lint rule, and
+						// the verification scanner ignores inline disables.
 						throw new NodeApiError(this.getNode(), error as never);
 					}
 				}
@@ -352,6 +378,15 @@ export class HookdeckTrigger implements INodeType {
 				.concat(staticData.signingSecret)
 				.filter((secret): secret is string => typeof secret === 'string' && secret.length > 0);
 
+			if (secrets.length === 0) {
+				// Static data does not survive an export/import or an instance
+				// migration. Without this, every delivery 401s and nothing says why,
+				// when the fix is simply to reactivate and reprovision.
+				this.logger.warn(
+					'Hookdeck Trigger: signature verification is on but no signing secret is stored for this workflow, so every delivery will be rejected. Reactivate the workflow to reprovision it.',
+				);
+			}
+
 			const verified = secrets.some((secret) => verifySignature(rawBody, signature, secret));
 
 			if (!verified) {
@@ -367,7 +402,10 @@ export class HookdeckTrigger implements INodeType {
 		//
 		// 400 is deliberate: it sits outside the retry rule's 500-599/429 range,
 		// so a malformed body fails once rather than burning every retry.
-		if (Buffer.isBuffer(rawBody) && !isValidUtf8(rawBody)) {
+		// Only for payloads meant to be text. A binary body — multipart, compressed,
+		// a non-UTF-8 XML charset — is legitimately not UTF-8, and rejecting it
+		// would make those providers permanently undeliverable.
+		if (Buffer.isBuffer(rawBody) && expectsUtf8(this.getHeaderData()) && !isValidUtf8(rawBody)) {
 			const response = this.getResponseObject();
 			response.status(400).json({ message: 'Request body is not valid UTF-8' });
 			return { noWebhookResponse: true };

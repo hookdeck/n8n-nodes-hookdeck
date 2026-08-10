@@ -15,6 +15,7 @@ import { createHmac } from 'node:crypto';
 
 import {
 	SIGNATURE_HEADER,
+	expectsUtf8,
 	extractDeliveryMetadata,
 	generateSigningSecret,
 	isValidUtf8,
@@ -28,7 +29,7 @@ import {
 } from '../dist/nodes/Hookdeck/Naming.js';
 import { Hookdeck } from '../dist/nodes/Hookdeck/Hookdeck.node.js';
 import { HookdeckTrigger } from '../dist/nodes/Hookdeck/HookdeckTrigger.node.js';
-import { SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
+import { SOURCE_TYPE_AUTH_FIELDS, SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
 
 /** Hookdeck's own constraint on source, destination and connection names. */
 const HOOKDECK_NAME_PATTERN = /^[A-z0-9-_]+$/;
@@ -128,6 +129,35 @@ test('verifySignature accepts a Buffer and an equivalent string alike', () => {
 	assert.equal(verifySignature(body, signature, secret), true);
 });
 
+test('expectsUtf8 holds text payloads to UTF-8 and lets binary through', () => {
+	// The UTF-8 check exists to stop silent U+FFFD corruption inside JSON. Applied
+	// to a binary body it would instead make that provider undeliverable.
+	for (const ct of [
+		'application/json',
+		'application/json; charset=utf-8',
+		'application/vnd.github+json',
+		'text/plain',
+		'application/x-www-form-urlencoded',
+		'application/xml',
+		'application/atom+xml',
+	]) {
+		assert.equal(expectsUtf8({ 'content-type': ct }), true, ct);
+	}
+
+	for (const ct of [
+		'application/octet-stream',
+		'application/gzip',
+		'multipart/form-data; boundary=x',
+		'image/png',
+		'application/protobuf',
+	]) {
+		assert.equal(expectsUtf8({ 'content-type': ct }), false, ct);
+	}
+
+	// A webhook with no declared type is treated as text, which is what it is.
+	assert.equal(expectsUtf8({}), true);
+});
+
 test('isValidUtf8 rejects bodies Node would silently corrupt', () => {
 	// Invalid byte inside a JSON string value: JSON.parse succeeds and the
 	// corruption is invisible downstream, which is why this is checked up front.
@@ -215,6 +245,76 @@ test('describeUnreachableWebhookUrl accepts public addresses', () => {
 
 test('describeUnreachableWebhookUrl reports an unparseable URL', () => {
 	assert.match(describeUnreachableWebhookUrl('not a url'), /not a valid URL/);
+});
+
+test('describeUnreachableWebhookUrl rejects CGNAT addresses', () => {
+	// 100.64.0.0/10 is what Tailscale hands out, a common way to reach a
+	// self-hosted n8n, and it is not routable from Hookdeck.
+	for (const url of [
+		'http://100.64.0.1:5678/webhook/abc',
+		'http://100.100.50.2:5678/webhook/abc',
+		'http://100.127.255.254/webhook/abc',
+	]) {
+		assert.ok(describeUnreachableWebhookUrl(url), `should reject ${url}`);
+	}
+
+	// Public 100.x addresses outside the CGNAT block must still pass.
+	assert.equal(describeUnreachableWebhookUrl('http://100.63.0.1/webhook/abc'), undefined);
+	assert.equal(describeUnreachableWebhookUrl('http://100.128.0.1/webhook/abc'), undefined);
+});
+
+test('platform auth fields cover the source types that need a secret', () => {
+	// A secret placed in the wrong field is rejected by the API at activation,
+	// so the mapping has to come from the spec rather than be assumed.
+	assert.equal(SOURCE_TYPE_AUTH_FIELDS.STRIPE[0], 'webhook_secret_key');
+	assert.equal(SOURCE_TYPE_AUTH_FIELDS.GITLAB[0], 'api_key');
+	assert.equal(SOURCE_TYPE_AUTH_FIELDS.TWITTER[0], 'api_key');
+
+	// Types needing several values cannot be expressed by one secret input.
+	assert.ok(SOURCE_TYPE_AUTH_FIELDS.POSTMARK.length > 1);
+	assert.deepEqual([...SOURCE_TYPE_AUTH_FIELDS.POSTMARK].sort(), ['password', 'username']);
+
+	// Every mapped type must name at least one field, or the lookup is useless.
+	for (const [type, fields] of Object.entries(SOURCE_TYPE_AUTH_FIELDS)) {
+		assert.ok(Array.isArray(fields) && fields.length > 0, `${type} has no auth fields`);
+	}
+});
+
+test('every source type offered in the UI is a real spec value', () => {
+	// The auth map and the dropdown are generated from the same schema; a type in
+	// the map that the UI never offers would be dead weight, and the reverse
+	// would mean offering something unprovisionable.
+	const offered = new Set(SOURCE_TYPE_OPTIONS.map((o) => o.value));
+	for (const type of Object.keys(SOURCE_TYPE_AUTH_FIELDS)) {
+		assert.ok(offered.has(type), `${type} is mapped but not offered in the UI`);
+	}
+});
+
+test('searchSources does not cap results when a search term is given', async () => {
+	// A cap while searching hides sources the user explicitly asked for.
+	const { searchSources } = new HookdeckTrigger().methods.listSearch;
+	const seen = [];
+	const ctx = {
+		getNode: () => ({ name: 'Hookdeck Trigger' }),
+		helpers: {
+			httpRequestWithAuthentication: (_c, options) => {
+				seen.push(options.qs?.limit);
+				return Promise.resolve({
+					statusCode: 200,
+					body: { models: [{ id: 'src_1', name: 'alpha', url: 'https://hkdk.events/a' }], pagination: {} },
+				});
+			},
+		},
+	};
+
+	await searchSources.call(ctx, 'alpha');
+	const whenSearching = seen.pop();
+	await searchSources.call(ctx);
+	const whenBrowsing = seen.pop();
+
+	// Browsing is bounded; searching asks for a full page and keeps paging.
+	assert.ok(whenBrowsing <= 250);
+	assert.ok(whenSearching >= whenBrowsing);
 });
 
 test('signature header does not collide with Hookdeck own signature', () => {
@@ -442,6 +542,8 @@ function fakeHookContext({ webhookUrl, staticData, params = {} }) {
 		staticData,
 		getWorkflowStaticData: () => staticData,
 		getNodeWebhookUrl: () => webhookUrl,
+		// n8n reports 'manual' for a test listen; provisioning on activation is not.
+		getMode: () => 'trigger',
 		getWorkflow: () => ({ id: 'wf1' }),
 		getNode: () => ({ id: 'node1', name: 'Hookdeck Trigger', type: 'hookdeckTrigger' }),
 		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),

@@ -53,7 +53,7 @@ configured on the node under **Options**.
 | Source | The Hookdeck source. **From List** shows every source in the project with its public URL, so you can copy the URL for your provider without leaving the canvas. **By Name** takes a new name — letters, numbers, hyphens and underscores — and creates the source on publish. |
 | Source Type | The platform sending events. Selecting a platform applies its signature verification scheme. Use **Webhook (Generic)** to configure verification yourself. |
 | Verification | For generic sources: HMAC, API Key, Basic Auth, or none. |
-| Webhook Secret | For platform sources: the signing secret the platform issued you. |
+| Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. |
 
 ### Options
 
@@ -159,6 +159,11 @@ other hosts. Two parts of it work differently here, because n8n requires it:
   `Retry-After` when a concurrency cap is reached. n8n governs its own execution
   concurrency, so the equivalent lever here is the **Delivery Rate Limit**
   option, which caps delivery inside Hookdeck before n8n is reached.
+
+One further caveat: test and production registrations are told apart by n8n's
+webhook path. If your instance renames it via `N8N_ENDPOINT_WEBHOOK_TEST`, a test
+run can be filed as production; the node logs a warning when it detects that, but
+cannot correct for it.
 
 Destination authentication also uses `CUSTOM_SIGNATURE` rather than
 `HOOKDECK_SIGNATURE`. Hookdeck's project signing secret is not exposed through

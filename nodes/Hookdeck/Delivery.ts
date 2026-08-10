@@ -104,6 +104,30 @@ export function extractDeliveryMetadata(
  * The check is a re-encode comparison: only well-formed UTF-8 survives a
  * decode/encode round trip byte for byte.
  */
+/**
+ * Whether a request's declared content type is one that must be UTF-8.
+ *
+ * JSON and text payloads are; binary ones are not, and holding them to it would
+ * reject legitimate traffic. A request with no content type at all is treated as
+ * text, since that is what a webhook almost always is.
+ */
+export function expectsUtf8(headers: Record<string, unknown>): boolean {
+	const raw = headers['content-type'];
+	const contentType = (Array.isArray(raw) ? raw[0] : raw) as string | undefined;
+	if (!contentType) return true;
+
+	const type = contentType.split(';')[0].trim().toLowerCase();
+	return (
+		type === '' ||
+		type.startsWith('text/') ||
+		type === 'application/json' ||
+		type.endsWith('+json') ||
+		type === 'application/x-www-form-urlencoded' ||
+		type === 'application/xml' ||
+		type.endsWith('+xml')
+	);
+}
+
 export function isValidUtf8(body: Buffer): boolean {
 	return Buffer.from(body.toString('utf8'), 'utf8').equals(body);
 }

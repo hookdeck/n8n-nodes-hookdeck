@@ -10,6 +10,35 @@ import type { IDataObject, IHookFunctions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
 import { SIGNATURE_HEADER } from './Delivery';
+import { SOURCE_TYPE_AUTH_FIELDS } from './SourceTypes';
+
+/** Field a platform's verification secret belongs in. */
+const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
+
+/**
+ * Resolve which auth field a single supplied secret should populate.
+ *
+ * Most platforms name it `webhook_secret_key`, but a sizeable minority use
+ * `api_key`, `public_key` or similar, and putting a secret in the wrong field is
+ * rejected by the API at activation. A handful need more than one value, which a
+ * single input cannot express — those are refused here with the field names, so
+ * the message says what to do rather than surfacing a 422.
+ */
+function platformAuthField(this: IHookFunctions, sourceType: string): string {
+	const fields = SOURCE_TYPE_AUTH_FIELDS[sourceType];
+	if (!fields || fields.length === 0) return DEFAULT_PLATFORM_AUTH_FIELD;
+	if (fields.length === 1) return fields[0];
+
+	throw new NodeOperationError(
+		this.getNode(),
+		`${sourceType} verification needs more than one value, so Webhook Secret cannot express it`,
+		{
+			description: `It expects ${fields.join(', ')}. Clear Webhook Secret and set Options → Source Config (JSON) to {"auth_type": "${sourceType}", "auth": {${fields
+				.map((f) => `"${f}": "…"`)
+				.join(', ')}}}.`,
+		},
+	);
+}
 
 /**
  * Translate the node's verification parameters into a Hookdeck source config.
@@ -52,7 +81,7 @@ export function buildSourceConfig(
 		const platformSecret = this.getNodeParameter('platformSecret', '') as string;
 		if (platformSecret) {
 			config.auth_type = sourceType;
-			config.auth = { webhook_secret_key: platformSecret };
+			config.auth = { [platformAuthField.call(this, sourceType)]: platformSecret };
 		}
 	}
 
