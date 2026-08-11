@@ -310,8 +310,12 @@ follow. If lossless payloads matter, compare against the original request under
 
 ## Compatibility
 
-Built against Hookdeck API version `2025-07-01`, and verified end to end on
-n8n **2.33.7** with Node.js 22. It targets `n8nNodesApiVersion: 1`, which n8n
+Built against Hookdeck API version `2025-07-01`. An earlier revision was
+verified end to end on n8n **2.33.7** with Node.js 22; the node types and the
+credential have been renamed since, and that has **not** been re-verified
+against a running n8n. `npm run verify:load` checks the package loads the way
+n8n loads it, which is what a rename most easily breaks, but it is not a
+substitute for the real thing. It targets `n8nNodesApiVersion: 1`, which n8n
 1.x also supports, but only 2.x has been tested — if you run 1.x, treat it as
 unverified rather than assumed working.
 
