@@ -28,14 +28,21 @@ and use the package name `@hookdeck/n8n-nodes-hookdeck`.
 
 ## Credentials
 
-The nodes authenticate with a Hookdeck project API key.
+The nodes authenticate with the API key of a Hookdeck **Event Gateway** project.
 
-1. Open [Hookdeck](https://dashboard.hookdeck.com) and select your project.
+1. Open [Hookdeck](https://dashboard.hookdeck.com) and select an Event Gateway
+   project.
 2. Go to **Project Settings → Secrets** and copy the API key.
-3. In n8n, create a new **Hookdeck API** credential and paste the key.
+3. In n8n, create a new **Hookdeck Event Gateway API** credential and paste the
+   key.
 
-The key is scoped to a single Hookdeck project. Everything the nodes create or
-read belongs to that project.
+One credential is one project. The key carries the project, so there is nothing
+else to configure and no way to reach across projects — everything these nodes
+create or read belongs to the project the key came from. To work with a second
+project, add a second credential.
+
+A key from an Outpost project will not work here. Outpost is the outbound path,
+with its own API; these nodes only speak to the Event Gateway.
 
 ## Hookdeck Event Gateway Trigger
 
@@ -311,7 +318,8 @@ unverified rather than assumed working.
 ### Layout
 
 ```
-credentials/HookdeckApi.credentials.ts   API key credential and its test request
+credentials/
+  HookdeckEventGatewayApi.credentials.ts API key credential and its test request
 nodes/Hookdeck/
   HookdeckEventGatewayTrigger.node.ts    trigger: provisioning lifecycle + delivery handling
   HookdeckEventGateway.node.ts           action node: resource/operation dispatch

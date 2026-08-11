@@ -43,7 +43,7 @@ export class HookdeckEventGateway implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'hookdeckApi',
+				name: 'hookdeckEventGatewayApi',
 				required: true,
 			},
 		],

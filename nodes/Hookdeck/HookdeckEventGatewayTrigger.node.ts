@@ -90,7 +90,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'hookdeckApi',
+				name: 'hookdeckEventGatewayApi',
 				required: true,
 			},
 		],

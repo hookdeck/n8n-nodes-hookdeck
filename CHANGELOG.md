@@ -42,11 +42,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
-- Both nodes are named for the Event Gateway rather than for Hookdeck as a
-  whole, leaving room for nodes covering Hookdeck's other products: display
-  names **Hookdeck Event Gateway** and **Hookdeck Event Gateway Trigger**, node
-  types `hookdeckEventGateway` and `hookdeckEventGatewayTrigger`. Done before
-  the first release because the node type is recorded in saved workflows.
+- Both nodes and the credential are named for the Event Gateway rather than for
+  Hookdeck as a whole, leaving room for nodes covering Hookdeck's other
+  products: display names **Hookdeck Event Gateway**, **Hookdeck Event Gateway
+  Trigger** and **Hookdeck Event Gateway API**, types `hookdeckEventGateway`,
+  `hookdeckEventGatewayTrigger` and `hookdeckEventGatewayApi`. Done before the
+  first release because these are recorded in saved workflows and credentials.
+- The credential is explicit that it takes the API key of a single Event Gateway
+  project, and that an Outpost key will not work.
 - The trigger now binds to an existing source by ID instead of describing it
   inline in the upsert. Previously, activating a workflow applied the node's
   Source Type and Verification to any source of that name — so publishing

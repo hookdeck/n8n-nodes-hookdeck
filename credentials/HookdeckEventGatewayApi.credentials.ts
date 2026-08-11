@@ -5,10 +5,10 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class HookdeckApi implements ICredentialType {
-	name = 'hookdeckApi';
+export class HookdeckEventGatewayApi implements ICredentialType {
+	name = 'hookdeckEventGatewayApi';
 
-	displayName = 'Hookdeck API';
+	displayName = 'Hookdeck Event Gateway API';
 
 	documentationUrl = 'https://hookdeck.com/docs/api';
 
@@ -26,7 +26,7 @@ export class HookdeckApi implements ICredentialType {
 			default: '',
 			required: true,
 			description:
-				'Project API key from Hookdeck. Find it under Project Settings → Secrets in the Hookdeck dashboard.',
+				'API key for a Hookdeck Event Gateway project. Find it under Project Settings → Secrets in the Hookdeck dashboard. Keys are scoped to one project, so everything these nodes create or read belongs to it.',
 		},
 	];
 

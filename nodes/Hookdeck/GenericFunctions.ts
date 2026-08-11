@@ -65,7 +65,7 @@ export async function hookdeckApiRequest(
 	try {
 		response = (await this.helpers.httpRequestWithAuthentication.call(
 			this,
-			'hookdeckApi',
+			'hookdeckEventGatewayApi',
 			options,
 		)) as { statusCode: number; body: unknown };
 	} catch (error) {

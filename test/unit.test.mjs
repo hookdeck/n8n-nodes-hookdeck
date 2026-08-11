@@ -429,7 +429,7 @@ for (const [label, NodeClass] of [
 		assert.ok(description.displayName);
 		assert.ok(description.name);
 		assert.ok(description.icon);
-		assert.equal(description.credentials[0].name, 'hookdeckApi');
+		assert.equal(description.credentials[0].name, 'hookdeckEventGatewayApi');
 		assert.equal(description.credentials[0].required, true);
 
 		eachProperty(description.properties, (property) => {

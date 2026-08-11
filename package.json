@@ -39,7 +39,7 @@
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/HookdeckApi.credentials.js"
+			"dist/credentials/HookdeckEventGatewayApi.credentials.js"
 		],
 		"nodes": [
 			"dist/nodes/Hookdeck/HookdeckEventGateway.node.js",
