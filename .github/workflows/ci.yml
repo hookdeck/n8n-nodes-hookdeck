@@ -39,5 +39,7 @@ jobs:
       - name: Run n8n verification scan
         run: 'npm run scan'
 
+      # Unit only. The integration suite needs a Hookdeck API key and is run by
+      # the Integration workflow, which has access to the secret.
       - name: Run tests
-        run: 'node --test "test/**/*.test.mjs"'
+        run: 'node --test "test/unit.test.mjs"'

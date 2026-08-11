@@ -26,17 +26,17 @@ import { sanitizeName } from './Naming';
  * cursor pagination, and "Get URL" resolves a source by name before reading a
  * field off it. Declarative routing cannot express either.
  */
-export class Hookdeck implements INodeType {
+export class HookdeckEventGateway implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Hookdeck',
-		name: 'hookdeck',
+		displayName: 'Hookdeck Event Gateway',
+		name: 'hookdeckEventGateway',
 		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Manage the Hookdeck Event Gateway and inspect delivered events',
 		defaults: {
-			name: 'Hookdeck',
+			name: 'Hookdeck Event Gateway',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],

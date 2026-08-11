@@ -369,6 +369,14 @@ export const triggerProperties: INodeProperties[] = [
 						'Advanced. Merged into the source config sent to Hookdeck, overriding the fields above. Use for verification schemes that need more than a single secret.',
 				},
 				{
+					displayName: 'Update Existing Source',
+					name: 'updateExistingSource',
+					type: 'boolean',
+					default: false,
+					description:
+						'Whether to apply this node\'s Source Type and Verification to a source that already exists. Off by default: a source can feed several connections, and rewriting it changes how their events are verified too. Leave off to adopt the existing source exactly as it is configured in Hookdeck.',
+				},
+				{
 					displayName: 'Verify Signature',
 					name: 'verifySignature',
 					type: 'boolean',

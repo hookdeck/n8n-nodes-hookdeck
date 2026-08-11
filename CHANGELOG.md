@@ -31,5 +31,34 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Hookdeck** node covering Attempts, Connections, Destinations, Events,
   Issues, Requests and Sources, including Get Source URL and cursor-following
   "Return All".
+- **Update Existing Source** option on the trigger, to deliberately apply the
+  node's Source Type and Verification to a source that already exists.
+- `npm run generate:source-types` and `npm run check:source-types`, which
+  generate `SourceTypes.ts` from Hookdeck's OpenAPI schema and detect drift. A
+  weekly scheduled workflow runs the check.
+- Live integration tests (`npm run test:integration`), which run the trigger's
+  provisioning against a real Hookdeck project to confirm an existing source
+  survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
+
+### Changed
+
+- Both nodes are named for the Event Gateway rather than for Hookdeck as a
+  whole, leaving room for nodes covering Hookdeck's other products: display
+  names **Hookdeck Event Gateway** and **Hookdeck Event Gateway Trigger**, node
+  types `hookdeckEventGateway` and `hookdeckEventGatewayTrigger`. Done before
+  the first release because the node type is recorded in saved workflows.
+- The trigger now binds to an existing source by ID instead of describing it
+  inline in the upsert. Previously, activating a workflow applied the node's
+  Source Type and Verification to any source of that name — so publishing
+  against an existing verified source rewrote it to the node's defaults
+  (`WEBHOOK`, no verification), affecting every other connection fed by it.
+  Existing sources are now adopted as they are, and the workflow log says when
+  the node's settings did not apply. Set **Update Existing Source** to opt back
+  in to the old behaviour.
+- Source type display names now come from the OpenAPI schema, correcting vendor
+  casing on 24 of them (`Docusign` → `DocuSign`, `Whatsapp` → `WhatsApp`,
+  `Gocardless` → `GoCardless`, and so on).
+- `@n8n/node-cli` is pinned to `^0.42.2` rather than floating on `*`, so a build
+  is reproducible.
 
 [Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/commits/main

@@ -1,14 +1,22 @@
 # @hookdeck/n8n-nodes-hookdeck
 
-An n8n community node for [Hookdeck](https://hookdeck.com), an event gateway for
-receiving, queueing and delivering webhooks and other asynchronous messages.
+An n8n community node for the
+[Hookdeck Event Gateway](https://hookdeck.com/docs/introduction), which receives,
+queues and delivers webhooks and other asynchronous messages.
 
 This package adds two nodes:
 
-- **Hookdeck Trigger** — starts a workflow when Hookdeck delivers an event, and
-  sets up the Hookdeck connection that delivers it.
-- **Hookdeck** — manages sources, destinations and connections, and inspects
-  events, delivery attempts, requests and issues.
+- **Hookdeck Event Gateway Trigger** — starts a workflow when the Event Gateway
+  delivers an event, and sets up the connection that delivers it.
+- **Hookdeck Event Gateway** — manages sources, destinations and connections,
+  and inspects events, delivery attempts, requests and issues.
+
+**Scope.** These nodes cover the Event Gateway only — the inbound path, where
+Hookdeck receives events on your behalf and delivers them to n8n. Hookdeck's
+other products are not covered here: notably
+[Outpost](https://hookdeck.com/outpost), which is the outbound path for
+publishing events to *your* users' destinations. Outbound publishing would be a
+separate node, not an operation on these.
 
 [n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
 workflow automation platform.
@@ -29,7 +37,7 @@ The nodes authenticate with a Hookdeck project API key.
 The key is scoped to a single Hookdeck project. Everything the nodes create or
 read belongs to that project.
 
-## Hookdeck Trigger
+## Hookdeck Event Gateway Trigger
 
 Set a source name, pick the platform sending the events, and activate the
 workflow. On activation the node creates a Hookdeck connection whose destination
@@ -40,18 +48,23 @@ Events arrive through Hookdeck rather than directly, so Hookdeck's connection
 rules apply to them — retries, delivery rate limits and deduplication are
 configured on the node under **Options**.
 
-> **Naming an existing source rewrites it.** Provisioning is an upsert keyed on
-> the source name, so if a source of that name already exists, this node's
-> Source Type and Verification settings are applied to it — replacing whatever
-> was there and affecting every other connection fed by that source. Use a name
-> specific to this workflow unless you deliberately want to share a source.
+**An existing source is adopted, not rewritten.** If a source of that name is
+already in the project, the node binds the connection to it by ID and leaves its
+Source Type and Verification exactly as they are — a source can feed several
+connections, and rewriting it would change how their events are verified too.
+The node's own Source Type and Verification apply only when it creates the
+source. When they are ignored, the workflow log says so.
+
+To deliberately reconfigure an existing source, turn on **Options → Update
+Existing Source**. That applies this node's settings to the source, and to every
+connection fed by it.
 
 ### Parameters
 
 | Parameter | Description |
 | --- | --- |
 | Source | The Hookdeck source. **From List** shows every source in the project with its public URL, so you can copy the URL for your provider without leaving the canvas. **By Name** takes a new name — letters, numbers, hyphens and underscores — and creates the source on publish. |
-| Source Type | The platform sending events. Selecting a platform applies its signature verification scheme. Use **Webhook (Generic)** to configure verification yourself. |
+| Source Type | The platform sending events. Selecting a platform applies its signature verification scheme. Use **Webhook (Generic)** to configure verification yourself. Applies when the node creates the source; an existing source keeps its own type. |
 | Verification | For generic sources: HMAC, API Key, Basic Auth, or none. |
 | Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. |
 
@@ -65,6 +78,7 @@ configured on the node under **Options**.
 | Delivery Group Key / Rate Limit / Period | Group deliveries by a payload path, so each customer or repository gets its own rate limit and one busy sender cannot crowd out the rest. |
 | On Deactivate | Pause the connection (default) or delete it. See below. |
 | Header Prefix | Prefix of Hookdeck's metadata headers. Change only for a white-labelled project. |
+| Update Existing Source | Apply this node's Source Type and Verification to a source that already exists. Off by default — see above. |
 | Verify Signature | Reject deliveries that are not signed by Hookdeck. On by default. |
 | Source Config (JSON) | Advanced. Merged into the source config, for verification schemes the fields above cannot express. |
 
@@ -87,7 +101,7 @@ you add to the workflow rather than something the trigger can do for you:
 
 1. Set an **Error Workflow** on the workflow (Settings → Error Workflow), or add
    an error output branch.
-2. In it, add the **Hookdeck** node with **Event → Retry**.
+2. In it, add the **Hookdeck Event Gateway** node with **Event → Retry**.
 3. Set the Event ID to the failing execution's event:
    `{{ $json.hookdeck.eventId }}`.
 
@@ -200,7 +214,7 @@ node parameter — so to get the URL onto your clipboard, use one of:
   which has a copy button. (It deliberately does *not* open the source URL
   itself — that endpoint rejects browser `GET` requests with `405`, and pointing
   a link at your own ingest endpoint invites firing requests at it by accident.)
-- **The Hookdeck node, Source → Get URL.** This returns the URL as workflow
+- **The Hookdeck Event Gateway node, Source → Get URL.** This returns the URL as workflow
   data, where n8n's output panel gives you copy-on-hover. Best if you want the
   URL properly copy-pasteable inside n8n, or want to use it in an expression.
 
@@ -270,7 +284,7 @@ original sender wrote — "the signature passed, so the body is intact" does not
 follow. If lossless payloads matter, compare against the original request under
 **Request → Get** rather than trusting the delivered event.
 
-## Hookdeck node
+## Hookdeck Event Gateway node
 
 | Resource | Operations |
 | --- | --- |
@@ -299,8 +313,8 @@ unverified rather than assumed working.
 ```
 credentials/HookdeckApi.credentials.ts   API key credential and its test request
 nodes/Hookdeck/
-  HookdeckTrigger.node.ts                trigger: provisioning lifecycle + delivery handling
-  Hookdeck.node.ts                       action node: resource/operation dispatch
+  HookdeckEventGatewayTrigger.node.ts    trigger: provisioning lifecycle + delivery handling
+  HookdeckEventGateway.node.ts           action node: resource/operation dispatch
   descriptions/
     TriggerProperties.ts                 trigger UI
     ActionProperties.ts                  action node UI
@@ -309,7 +323,7 @@ nodes/Hookdeck/
   Delivery.ts                            verifying and describing an inbound delivery
   Naming.ts                              Hookdeck naming rules, reachability checks
   GenericFunctions.ts                    HTTP transport, error mapping, pagination
-  SourceTypes.ts                         generated source-type list
+  SourceTypes.ts                         generated source-type list (do not hand-edit)
 ```
 
 The UI definitions live apart from the nodes because they are long and rarely
@@ -322,10 +336,26 @@ are shared with the Hookdeck plugins for other hosts.
 ```bash
 npm install
 npm run build
-npm test          # builds, then runs the suite with node:test
+npm test          # builds, then runs the unit suite with node:test
 npm run lint      # n8n's community-node rules
 npm run scan      # the same checks n8n runs when reviewing for verification
+
+HOOKDECK_EG_API_KEY=... npm run test:integration   # live tests against the API
+
+npm run generate:source-types   # rewrite SourceTypes.ts from Hookdeck's OpenAPI spec
+npm run check:source-types      # fail if it has drifted from the spec
 ```
+
+`SourceTypes.ts` is generated, so the ~150 platform types and their auth shapes
+are never hand-maintained. A scheduled workflow runs `check:source-types` weekly
+rather than blocking every pull request, because the spec is a live third-party
+document and a Hookdeck release would otherwise fail unrelated CI.
+
+The integration suite is skipped unless `HOOKDECK_EG_API_KEY` is set, so the
+default `npm test` needs no credentials. It creates and deletes real sources,
+destinations and connections — point it at a throwaway Event Gateway project,
+never one carrying live traffic. In CI it runs from a repository secret of the
+same name, and is skipped for pull requests from forks, which cannot read it.
 
 `npm run scan` is the one that matters before submitting: it runs
 `@n8n/scan-community-package` against this working tree, with inline

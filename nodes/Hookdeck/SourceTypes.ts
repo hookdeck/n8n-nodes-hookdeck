@@ -1,14 +1,14 @@
 import type { INodePropertyOptions } from 'n8n-workflow';
 
 /**
- * Hookdeck source types, generated from the live OpenAPI schema:
- *
- *   curl -s https://api.hookdeck.com/2025-07-01/openapi \
- *     | jq -r '.components.schemas.Source.properties.type.enum[]'
+ * Hookdeck source types for the Event Gateway, generated from the live OpenAPI
+ * schema. Do not edit by hand — run `npm run generate:source-types`, which
+ * reads `Source.properties.type.enum` and the `SourceTypeConfig*` schemas
+ * from https://api.hookdeck.com/2025-07-01/openapi.
  *
  * Held as a constant rather than fetched at runtime: the spec is ~475KB and a
- * dropdown should not pay that cost every time it opens. Regenerate when
- * Hookdeck adds platform support.
+ * dropdown should not pay that cost every time it opens. `npm run
+ * check:source-types` fails when this file no longer matches the spec.
  *
  * Choosing a platform type makes Hookdeck apply that platform's own signature
  * verification scheme. `WEBHOOK` is the generic type, where the verification
@@ -44,35 +44,36 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Commerce Layer', value: 'COMMERCELAYER' },
 	{ name: 'Courier', value: 'COURIER' },
 	{ name: 'Cursor', value: 'CURSOR' },
-	{ name: 'Customerio', value: 'CUSTOMERIO' },
+	{ name: 'Customer.IO', value: 'CUSTOMERIO' },
 	{ name: 'Discord', value: 'DISCORD' },
-	{ name: 'Docusign', value: 'DOCUSIGN' },
+	{ name: 'DocuSign', value: 'DOCUSIGN' },
 	{ name: 'Ebay', value: 'EBAY' },
 	{ name: 'ElevenLabs', value: 'ELEVENLABS' },
 	{ name: 'Enode', value: 'ENODE' },
 	{ name: 'Ethoca', value: 'ETHOCA' },
 	{ name: 'Exact Online', value: 'EXACT_ONLINE' },
 	{ name: 'Facebook', value: 'FACEBOOK' },
-	{ name: 'Fastspring', value: 'FASTSPRING' },
+	{ name: 'FastSpring', value: 'FASTSPRING' },
 	{ name: 'Faundit', value: 'FAUNDIT' },
 	{ name: 'Favro', value: 'FAVRO' },
 	{ name: 'Fireblocks', value: 'FIREBLOCKS' },
-	{ name: 'Fireflies', value: 'FIREFLIES' },
+	{ name: 'Fireflies.ai', value: 'FIREFLIES' },
 	{ name: 'Fiserv', value: 'FISERV' },
 	{ name: 'Flexport', value: 'FLEXPORT' },
 	{ name: 'Front', value: 'FRONTAPP' },
-	{ name: 'Fusionauth', value: 'FUSIONAUTH' },
-	{ name: 'Gemini', value: 'GEMINI' },
+	{ name: 'FusionAuth', value: 'FUSIONAUTH' },
 	{ name: 'GitHub', value: 'GITHUB' },
 	{ name: 'GitLab', value: 'GITLAB' },
-	{ name: 'Gocardless', value: 'GOCARDLESS' },
-	{ name: 'Greendot', value: 'GREENDOT' },
+	{ name: 'GoCardless', value: 'GOCARDLESS' },
+	{ name: 'Google Gemini', value: 'GEMINI' },
+	{ name: 'GreenDot', value: 'GREENDOT' },
 	{ name: 'Hookdeck Outpost', value: 'HOOKDECK_OUTPOST' },
+	{ name: 'Hookdeck Publish API', value: 'PUBLISH_API' },
 	{ name: 'HTTP', value: 'HTTP' },
 	{ name: 'Hubspot', value: 'HUBSPOT' },
 	{ name: 'Intercom', value: 'INTERCOM' },
 	{ name: 'Linear', value: 'LINEAR' },
-	{ name: 'Linkedin', value: 'LINKEDIN' },
+	{ name: 'LinkedIn', value: 'LINKEDIN' },
 	{ name: 'Lithic', value: 'LITHIC' },
 	{ name: 'Mailchimp', value: 'MAILCHIMP' },
 	{ name: 'Mailgun', value: 'MAILGUN' },
@@ -82,7 +83,7 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Microsoft SharePoint', value: 'MICROSOFT_SHAREPOINT' },
 	{ name: 'Monday', value: 'MONDAY' },
 	{ name: 'Neon', value: 'NEON' },
-	{ name: 'Nmi', value: 'NMI' },
+	{ name: 'NMI Payment Gateway', value: 'NMI' },
 	{ name: 'Nuvemshop', value: 'NUVEMSHOP' },
 	{ name: 'Nylas', value: 'NYLAS' },
 	{ name: 'Okta', value: 'OKTA' },
@@ -92,7 +93,7 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Paddle', value: 'PADDLE' },
 	{ name: 'Paymob', value: 'PAYMOB' },
 	{ name: 'Paypal', value: 'PAYPAL' },
-	{ name: 'Paypro Global', value: 'PAYPRO_GLOBAL' },
+	{ name: 'PayPro Global', value: 'PAYPRO_GLOBAL' },
 	{ name: 'Paystack', value: 'PAYSTACK' },
 	{ name: 'Persona', value: 'PERSONA' },
 	{ name: 'Picqer', value: 'PICQER' },
@@ -102,7 +103,6 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Postmark', value: 'POSTMARK' },
 	{ name: 'Praxis', value: 'PRAXIS' },
 	{ name: 'Property Finder', value: 'PROPERTY-FINDER' },
-	{ name: 'Publish API', value: 'PUBLISH_API' },
 	{ name: 'Pylon', value: 'PYLON' },
 	{ name: 'Quoter', value: 'QUOTER' },
 	{ name: 'Razorpay', value: 'RAZORPAY' },
@@ -117,9 +117,9 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Sanity', value: 'SANITY' },
 	{ name: 'Scrapfly', value: 'SCRAPFLY' },
 	{ name: 'SendGrid', value: 'SENDGRID' },
-	{ name: 'Shipbob', value: 'SHIPBOB' },
-	{ name: 'Shiphero', value: 'SHIPHERO' },
-	{ name: 'Shipstation', value: 'SHIPSTATION' },
+	{ name: 'ShipBob', value: 'SHIPBOB' },
+	{ name: 'ShipHero', value: 'SHIPHERO' },
+	{ name: 'ShipStation', value: 'SHIPSTATION' },
 	{ name: 'Shopify', value: 'SHOPIFY' },
 	{ name: 'Shopline', value: 'SHOPLINE' },
 	{ name: 'Slack', value: 'SLACK' },
@@ -136,9 +136,9 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Tebex', value: 'TEBEX' },
 	{ name: 'Telnyx', value: 'TELNYX' },
 	{ name: 'Tikkie', value: 'TIKKIE' },
-	{ name: 'Tiktok', value: 'TIKTOK' },
-	{ name: 'Tiktok Shop', value: 'TIKTOK_SHOP' },
-	{ name: 'Tokenio', value: 'TOKENIO' },
+	{ name: 'TikTok', value: 'TIKTOK' },
+	{ name: 'TikTok Shop', value: 'TIKTOK_SHOP' },
+	{ name: 'TokenIO', value: 'TOKENIO' },
 	{ name: 'Treezor', value: 'TREEZOR' },
 	{ name: 'Trello', value: 'TRELLO' },
 	{ name: 'Twilio', value: 'TWILIO' },
@@ -146,32 +146,31 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
 	{ name: 'Typeform', value: 'TYPEFORM' },
 	{ name: 'Uber', value: 'UBER' },
 	{ name: 'Upollo', value: 'UPOLLO' },
-	{ name: 'Usps', value: 'USPS' },
+	{ name: 'USPS', value: 'USPS' },
 	{ name: 'Utila', value: 'UTILA' },
 	{ name: 'Vapi', value: 'VAPI' },
-	{ name: 'Vercel', value: 'VERCEL' },
-	{ name: 'Vercel Log Drains', value: 'VERCEL_LOG_DRAINS' },
+	{ name: 'Vercel Drains', value: 'VERCEL_LOG_DRAINS' },
+	{ name: 'Vercel Webhooks', value: 'VERCEL' },
 	{ name: 'Volume', value: 'VOLUME' },
 	{ name: 'Walmart', value: 'WALMART' },
 	{ name: 'Webhook (Generic)', value: 'WEBHOOK' },
-	{ name: 'Wechat', value: 'WECHAT' },
-	{ name: 'Whatsapp', value: 'WHATSAPP' },
+	{ name: 'WeChat Pay', value: 'WECHAT' },
+	{ name: 'WhatsApp', value: 'WHATSAPP' },
 	{ name: 'Wix', value: 'WIX' },
 	{ name: 'WooCommerce', value: 'WOOCOMMERCE' },
 	{ name: 'WorkOS', value: 'WORKOS' },
 	{ name: 'X (Twitter)', value: 'TWITTER' },
 	{ name: 'Xero', value: 'XERO' },
 	{ name: 'Zendesk', value: 'ZENDESK' },
-	{ name: 'Zerohash', value: 'ZEROHASH' },
+	{ name: 'ZeroHash', value: 'ZEROHASH' },
 	{ name: 'Zift', value: 'ZIFT' },
 	{ name: 'Zoom', value: 'ZOOM' },
 ];
 
 /**
- * How each source type expects its verification secret to be supplied,
- * generated from the same OpenAPI schema as the type list above
- * (`SourceTypeConfig*.properties.auth`, following $refs, inline definitions and
- * `oneOf` alike).
+ * How each source type expects its verification secret to be supplied, read
+ * from `SourceTypeConfig*.properties.auth` (following $refs, inline
+ * definitions and `oneOf` alike).
  *
  * The three cases are kept structurally distinct because they need different
  * answers, and an array alone cannot tell "takes no secret" apart from "several

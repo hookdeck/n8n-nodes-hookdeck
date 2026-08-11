@@ -30,10 +30,45 @@ import { triggerProperties } from './descriptions/TriggerProperties';
 /** How many sources to show when the list is opened without a search term. */
 const BROWSE_SOURCE_LIMIT = 250;
 
-export class HookdeckTrigger implements INodeType {
+/**
+ * Find a source by exact name, or undefined if the project has none.
+ *
+ * Hookdeck's `?name=` filter is an exact match, but it is still a list endpoint,
+ * so the single result has to be read out of the page.
+ */
+async function findSourceByName(
+	this: IHookFunctions,
+	name: string,
+): Promise<IDataObject | undefined> {
+	const matches = await hookdeckApiRequestAllItems.call(this, '/sources', { name }, 1);
+	return matches[0];
+}
+
+/**
+ * Say so when a source's own settings are being left alone.
+ *
+ * Adopting an existing source means this node's Source Type and Verification do
+ * not apply to it. That is the safe default, but it is silent — and a user who
+ * filled in a Webhook Secret expecting it to take effect deserves to know it
+ * did not, rather than discovering it when an unverified payload arrives.
+ */
+function warnIgnoredSourceConfig(
+	this: IHookFunctions,
+	source: IDataObject,
+	sourceType: string,
+): void {
+	const existingType = source.type as string | undefined;
+	if (existingType === sourceType) return;
+
+	this.logger.warn(
+		`Hookdeck Trigger: source "${source.name as string}" already exists as ${existingType}, so it was used as it is and this node's Source Type (${sourceType}) and Verification settings were not applied. Enable Options → "Update Existing Source" to apply them — note that this changes the source for every connection using it.`,
+	);
+}
+
+export class HookdeckEventGatewayTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Hookdeck Trigger',
-		name: 'hookdeckTrigger',
+		displayName: 'Hookdeck Event Gateway Trigger',
+		name: 'hookdeckEventGatewayTrigger',
 		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
 		group: ['trigger'],
 		version: 1,
@@ -45,7 +80,7 @@ export class HookdeckTrigger implements INodeType {
 		activationMessage:
 			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider.',
 		defaults: {
-			name: 'Hookdeck Trigger',
+			name: 'Hookdeck Event Gateway Trigger',
 		},
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
@@ -183,8 +218,8 @@ export class HookdeckTrigger implements INodeType {
 			/**
 			 * Provision the Hookdeck connection that fronts this workflow.
 			 *
-			 * One idempotent upsert creates the source, the destination and the
-			 * connection together, and returns the public source URL.
+			 * One idempotent upsert creates the destination and the connection, and
+			 * either creates the source or binds to the one already there.
 			 */
 			async create(this: IHookFunctions): Promise<boolean> {
 				const webhookUrl = this.getNodeWebhookUrl('default');
@@ -228,13 +263,38 @@ export class HookdeckTrigger implements INodeType {
 				// a moved URL does not invalidate signatures mid-flight.
 				const signingSecret = registration.signingSecret ?? generateSigningSecret();
 
+				// Bind to an existing source by ID rather than describing it inline.
+				//
+				// The upsert is keyed on source name, so an inline `source` block
+				// rewrites the type and verification config of a source that is already
+				// there — and that source may feed other connections, whose events would
+				// silently start being verified differently, or not at all. Since
+				// Source Type defaults to WEBHOOK and Verification to none, the common
+				// path of picking an existing source from the list would otherwise strip
+				// its verification on publish.
+				//
+				// `source_id` is unambiguous: it cannot carry a type or a config, so
+				// there is nothing for the API to overwrite.
+				const existingSource = await findSourceByName.call(this, sourceName);
+				const updateExisting = options.updateExistingSource === true;
+
+				let sourceBinding: IDataObject;
+				if (existingSource && !updateExisting) {
+					warnIgnoredSourceConfig.call(this, existingSource, sourceType);
+					sourceBinding = { source_id: existingSource.id as string };
+				} else {
+					sourceBinding = {
+						source: {
+							name: sourceName,
+							type: sourceType,
+							config: buildSourceConfig.call(this, sourceType, options),
+						},
+					};
+				}
+
 				const body: IDataObject = {
 					name: buildResourceName('n8n', workflowId, nodeId, isTest),
-					source: {
-						name: sourceName,
-						type: sourceType,
-						config: buildSourceConfig.call(this, sourceType, options),
-					},
+					...sourceBinding,
 					destination: {
 						name: buildResourceName('n8n-dest', workflowId, nodeId, isTest),
 						type: 'HTTP',
