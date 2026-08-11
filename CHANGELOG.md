@@ -55,9 +55,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Source Type and Verification to any source of that name — so publishing
   against an existing verified source rewrote it to the node's defaults
   (`WEBHOOK`, no verification), affecting every other connection fed by it.
-  Existing sources are now adopted as they are, and the workflow log says when
-  the node's settings did not apply. Set **Update Existing Source** to opt back
-  in to the old behaviour.
+  Existing sources are now adopted as they are, and the workflow log names each
+  setting that did not apply — including verification entered against a source
+  of the same type, which reaches Hookdeck under neither the old behaviour nor
+  the new one. Set **Update Existing Source** to opt back in to the old
+  behaviour.
 - Source type display names now come from the OpenAPI schema, correcting vendor
   casing on 24 of them (`Docusign` → `DocuSign`, `Whatsapp` → `WhatsApp`,
   `Gocardless` → `GoCardless`, and so on).

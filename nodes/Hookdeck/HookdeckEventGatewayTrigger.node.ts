@@ -47,21 +47,47 @@ async function findSourceByName(
 /**
  * Say so when a source's own settings are being left alone.
  *
- * Adopting an existing source means this node's Source Type and Verification do
- * not apply to it. That is the safe default, but it is silent — and a user who
- * filled in a Webhook Secret expecting it to take effect deserves to know it
- * did not, rather than discovering it when an unverified payload arrives.
+ * Adopting an existing source means nothing configured here reaches it. That is
+ * the safe default, but it is silent — and a user who filled in a Webhook Secret
+ * expecting it to take effect deserves to know it did not, rather than
+ * discovering it when an unverified payload arrives.
+ *
+ * Every setting that would otherwise have been sent is checked, not just the
+ * type. A source of the *same* type still keeps its own verification, so an HMAC
+ * secret entered here does not reach it either — and that case is the easiest to
+ * miss, because nothing about it looks unusual.
  */
 function warnIgnoredSourceConfig(
 	this: IHookFunctions,
 	source: IDataObject,
 	sourceType: string,
+	options: IDataObject,
 ): void {
 	const existingType = source.type as string | undefined;
-	if (existingType === sourceType) return;
+	const reasons: string[] = [];
+
+	if (existingType !== sourceType) {
+		reasons.push(`it is a ${existingType} source rather than ${sourceType}`);
+	}
+
+	const configuresVerification =
+		sourceType === 'WEBHOOK'
+			? (this.getNodeParameter('verification', 'none') as string) !== 'none'
+			: (this.getNodeParameter('platformSecret', '') as string) !== '';
+	if (configuresVerification) {
+		reasons.push('its verification stays as configured in Hookdeck');
+	}
+
+	if (options.sourceConfigJson) {
+		reasons.push('Source Config (JSON) was not applied');
+	}
+
+	if (reasons.length === 0) return;
 
 	this.logger.warn(
-		`Hookdeck Trigger: source "${source.name as string}" already exists as ${existingType}, so it was used as it is and this node's Source Type (${sourceType}) and Verification settings were not applied. Enable Options → "Update Existing Source" to apply them — note that this changes the source for every connection using it.`,
+		`Hookdeck Trigger: source "${source.name as string}" already exists, so it was used exactly as configured in Hookdeck and this node's source settings were not applied — ${reasons.join(
+			'; ',
+		)}. Enable Options → "Update Existing Source" to apply them, noting that this changes the source for every connection using it.`,
 	);
 }
 
@@ -280,7 +306,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 
 				let sourceBinding: IDataObject;
 				if (existingSource && !updateExisting) {
-					warnIgnoredSourceConfig.call(this, existingSource, sourceType);
+					warnIgnoredSourceConfig.call(this, existingSource, sourceType, options);
 					sourceBinding = { source_id: existingSource.id as string };
 				} else {
 					sourceBinding = {

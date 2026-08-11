@@ -157,7 +157,7 @@ test('an existing source survives provisioning untouched', { skip }, async (t) =
 	);
 
 	assert.equal(ctx.warnings.length, 1);
-	assert.match(ctx.warnings[0], /already exists as STRIPE/);
+	assert.match(ctx.warnings[0], /rather than WEBHOOK/);
 });
 
 test('Update Existing Source does rewrite it, on purpose', { skip }, async (t) => {

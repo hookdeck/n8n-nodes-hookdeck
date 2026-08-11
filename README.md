@@ -60,7 +60,9 @@ already in the project, the node binds the connection to it by ID and leaves its
 Source Type and Verification exactly as they are — a source can feed several
 connections, and rewriting it would change how their events are verified too.
 The node's own Source Type and Verification apply only when it creates the
-source. When they are ignored, the workflow log says so.
+source. Note that this holds even when the types agree: a Webhook Secret or HMAC
+setting entered here does not reach a source that already exists. Whenever a
+setting is ignored, the workflow log names it.
 
 To deliberately reconfigure an existing source, turn on **Options → Update
 Existing Source**. That applies this node's settings to the source, and to every

@@ -627,7 +627,7 @@ test('an existing source is adopted by ID, never rewritten', async () => {
 
 	// Silently ignoring the node's own settings would be its own trap, so say so.
 	assert.equal(warnings.length, 1);
-	assert.match(warnings[0], /already exists as STRIPE/);
+	assert.match(warnings[0], /rather than WEBHOOK/);
 	assert.match(warnings[0], /Update Existing Source/);
 });
 
@@ -676,9 +676,10 @@ test('Update Existing Source opts back in to rewriting the source', async () => 
 	assert.equal(upsert.body.source.config.auth.webhook_secret_key, 'whsec_123');
 });
 
-test('adopting a source of the same type says nothing', async () => {
+test('adopting a source that needs nothing said says nothing', async () => {
 	// The warning exists to flag settings that did not apply. When the node agrees
-	// with the source, nothing was ignored and a warning would be noise.
+	// with the source and configures nothing, nothing was ignored and a warning
+	// would be noise.
 	const staticData = {};
 	const warnings = [];
 	const ctx = fakeHookContext({
@@ -692,6 +693,72 @@ test('adopting a source of the same type says nothing', async () => {
 
 	assert.equal(upsertOf(ctx).body.source_id, 'src_existing');
 	assert.deepEqual(warnings, []);
+});
+
+test('verification entered against a same-type source is reported as ignored', async () => {
+	// The easiest case to miss: nothing about it looks unusual, the types agree,
+	// and the secret simply never reaches Hookdeck. Warning only on a type
+	// mismatch would leave this silent.
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: {
+			source: 'generic',
+			sourceType: 'WEBHOOK',
+			verification: 'HMAC',
+			hmacSecret: 'shhh',
+			hmacHeaderKey: 'x-signature',
+			hmacAlgorithm: 'sha256',
+			hmacEncoding: 'base64',
+		},
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'generic', type: 'WEBHOOK' }]);
+
+	assert.equal(upsertOf(ctx).body.source_id, 'src_existing');
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /verification stays as configured in Hookdeck/);
+});
+
+test('a platform secret entered against a same-type source is reported too', async () => {
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: { source: 'stripe-prod', sourceType: 'STRIPE', platformSecret: 'whsec_123' },
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'stripe-prod', type: 'STRIPE' }]);
+
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /verification stays as configured in Hookdeck/);
+	// The types agree, so that must not be given as a reason.
+	assert.doesNotMatch(warnings[0], /rather than/);
+});
+
+test('Source Config JSON that cannot apply is reported as ignored', async () => {
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: {
+			source: 'generic',
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			options: { sourceConfigJson: '{"auth_type":"HMAC"}' },
+		},
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'generic', type: 'WEBHOOK' }]);
+
+	assert.match(warnings[0], /Source Config \(JSON\) was not applied/);
 });
 
 test('test and production registrations are stored separately', async () => {
