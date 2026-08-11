@@ -310,14 +310,15 @@ follow. If lossless payloads matter, compare against the original request under
 
 ## Compatibility
 
-Built against Hookdeck API version `2025-07-01`. An earlier revision was
-verified end to end on n8n **2.33.7** with Node.js 22; the node types and the
-credential have been renamed since, and that has **not** been re-verified
-against a running n8n. `npm run verify:load` checks the package loads the way
-n8n loads it, which is what a rename most easily breaks, but it is not a
-substitute for the real thing. It targets `n8nNodesApiVersion: 1`, which n8n
-1.x also supports, but only 2.x has been tested — if you run 1.x, treat it as
-unverified rather than assumed working.
+Built against Hookdeck API version `2025-07-01`, and verified end to end on n8n
+**2.34.4** with Node.js 22.23.2: package loaded from `N8N_CUSTOM_EXTENSIONS`,
+credential created and its test passing, workflow activated, a live event sent
+through the source URL and received by the workflow with its signature verified,
+forged requests rejected with `401`, and an event sent while deactivated held and
+then delivered on reactivation.
+
+It targets `n8nNodesApiVersion: 1`, which n8n 1.x also supports, but only 2.x has
+been tested — if you run 1.x, treat it as unverified rather than assumed working.
 
 ## Development
 
@@ -382,8 +383,10 @@ npm link
 mkdir -p ~/.n8n/custom && cd ~/.n8n/custom && npm init -y && npm link @hookdeck/n8n-nodes-hookdeck
 ```
 
-Then start n8n with `./scripts/run-n8n.sh`. n8n needs Node 22.22 or newer; if
-your default is older, point `NODE_BIN` at a newer install.
+Then start n8n with `./scripts/run-n8n.sh`. n8n needs Node 22.22 or newer — the
+script checks and refuses otherwise. If your default is older, install one
+(`asdf install nodejs 22.23.2`) and point `NODE_BIN` at it rather than changing
+the machine default.
 
 The trigger cannot be exercised against `localhost`, because Hookdeck delivers
 over the public internet and the node rejects unreachable addresses up front.
@@ -393,6 +396,36 @@ Expose n8n and tell it the public address:
 cloudflared tunnel --url http://localhost:5678
 WEBHOOK_URL=https://<subdomain>.trycloudflare.com ./scripts/run-n8n.sh
 ```
+
+#### What about `hookdeck listen`?
+
+The obvious question, given this is a Hookdeck node — and the answer is not
+"it cannot work", it is "this node currently gets in the way".
+
+`hookdeck listen` will happily deliver a source's events to a local n8n. It
+creates its own connection with a `CLI` destination and streams matching events
+to your port, so `hookdeck listen 5678 my-source --path /webhook/<id>` reaches a
+workflow running on `localhost`. That part is fine.
+
+What stops it being a drop-in replacement for the tunnel is this node, in two
+places:
+
+- **The reachability guard rejects `localhost` at activation.** The trigger
+  provisions an `HTTP` destination pointing at the URL n8n advertises, and
+  refuses up front if Hookdeck could not reach it. So the workflow cannot be
+  activated at all, whatever the CLI is doing alongside it. This is our own
+  check, not a Hookdeck limitation.
+- **Signatures are applied by the destination, not the source.** The trigger
+  signs deliveries with a secret it puts on *its* destination as
+  `CUSTOM_SIGNATURE`. Events arriving via the CLI's destination carry no
+  `x-hookdeck-n8n-signature`, so the trigger answers `401` unless Verify
+  Signature is turned off.
+
+Net effect: the CLI can get events into a local n8n, but not through the path
+this node provisions — so it exercises the workflow without exercising the
+node's own delivery contract. Until that changes, use a tunnel for developing
+the trigger itself, and reach for `hookdeck listen` when the workflow starts
+from n8n's own Webhook node.
 
 ## Resources
 

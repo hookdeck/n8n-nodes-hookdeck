@@ -29,7 +29,7 @@
 		"generate:source-types": "node scripts/generate-source-types.mjs",
 		"check:source-types": "node scripts/generate-source-types.mjs --check",
 		"test": "npm run build && node --test \"test/unit.test.mjs\"",
-		"test:integration": "npm run build && node --test \"test/integration.test.mjs\"",
+		"test:integration": "npm run build && node --env-file-if-exists=.env --test \"test/integration.test.mjs\"",
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},

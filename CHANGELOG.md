@@ -36,6 +36,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `npm run generate:source-types` and `npm run check:source-types`, which
   generate `SourceTypes.ts` from Hookdeck's OpenAPI schema and detect drift. A
   weekly scheduled workflow runs the check.
+- `npm run verify:load`, which loads the built package the way n8n does and
+  checks what a rename breaks: declared paths, exported class names, codex node
+  types, icons, and credential wiring. Runs in CI.
 - Live integration tests (`npm run test:integration`), which run the trigger's
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
