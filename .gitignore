@@ -1,9 +1,11 @@
 dist
 node_modules
 
-# Local credentials for the integration suite. Never commit: this is a Hookdeck
-# project API key with full read/write on that project.
+# Local credentials for the integration suite. Never commit: this is a
+# Hookdeck project API key with full read/write on that project.
 .env
+.env.*
+!.env.example
 
 # Local n8n state, if N8N_USER_FOLDER is pointed inside the repo
 .n8n/
