@@ -136,10 +136,26 @@ credential class or a property is a candidate break. Read it, do not skim it.
 
    ```bash
    SHA=$(git rev-parse origin/main)
-   gh api "repos/hookdeck/n8n-nodes-hookdeck/commits/${SHA}/status" --jq .state
+   gh api graphql -f query='
+     query($owner:String!,$repo:String!,$sha:GitObjectID!){
+       repository(owner:$owner,name:$repo){
+         object(oid:$sha){ ... on Commit { statusCheckRollup { state } } }
+       }
+     }' -F owner=hookdeck -F repo=n8n-nodes-hookdeck -F sha="$SHA" \
+     --jq '.data.repository.object.statusCheckRollup.state'
    ```
 
-   Do not release on `failure`, or on `pending` for required checks.
+   Do not release on `FAILURE`, or on `PENDING` for required checks. The states
+   are uppercase.
+
+   **Do not use `gh api .../commits/${SHA}/status`.** It reads legacy commit
+   statuses, which GitHub Actions does not write — it writes check runs. This
+   repository has none, so that call returns `pending` with `total_count: 0`
+   however green CI is, and a gate built on it blocks every release. The rollup
+   above folds check runs and legacy statuses together, so it stays correct if a
+   status-writing integration is ever added.
+   ([hookdeck/hookdeck-cli#336](https://github.com/hookdeck/hookdeck-cli/issues/336),
+   where this check was inherited from.)
 3. Create the release targeting `main` (see **Publish with `gh`**).
 
 ## Pre-release (beta)
