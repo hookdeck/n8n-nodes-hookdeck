@@ -571,6 +571,50 @@ A tunnel still works if you prefer one — set `WEBHOOK_URL` to the public addre
 before starting n8n and the node provisions an HTTP destination instead. See
 [How events reach n8n](#how-events-reach-n8n) for what differs between the two.
 
+## Releasing
+
+Publishing is driven by a **GitHub Release**, not by a tag push and never from a
+laptop. n8n requires community nodes to be published from GitHub Actions with an
+npm provenance statement, so the publish has to happen in CI.
+
+1. Land everything through PRs, including promoting `## [Unreleased]` in
+   [CHANGELOG.md](CHANGELOG.md) to the new version with a date.
+2. Check `main` is green.
+3. Draft the release notes. Write them for someone running a workflow: what
+   changes for them, and whether they have to do anything.
+4. Create the release against `main`, tagged `vMAJOR.MINOR.PATCH`:
+
+   ```bash
+   gh release create v0.2.0 --target main --title v0.2.0 --notes-file notes.md
+   ```
+
+   Or use the GitHub UI — Releases → Draft a new release.
+
+Publishing then happens automatically:
+[`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
+version from it, re-runs lint, the verification scan, the build, the load check
+and the unit tests, and publishes with provenance. A release marked
+**pre-release** publishes under the `beta` dist-tag instead of `latest`.
+
+There is no release commit — the tag is the version, and `package.json` in git
+is not bumped to match.
+
+### Choosing the version
+
+SemVer here is about the contract with a **saved workflow**. n8n records the node
+type, the credential type and every parameter name inside the user's workflow
+JSON, so renaming any of them detaches existing workflows without failing a
+build. That is a MAJOR change, whatever it looks like in the diff.
+
+| Change | Bump |
+| --- | --- |
+| Renamed or removed node type, credential type, parameter, resource or operation; changed output item shape; a default that alters delivery behaviour | MAJOR |
+| New resource, operation or option; additive output fields; new source types | MINOR |
+| Fixes, wording, icons, tests, CI, dependency bumps | PATCH |
+
+Agents: [`skills/n8n-nodes-hookdeck-release`](skills/n8n-nodes-hookdeck-release/SKILL.md)
+carries the full checklist, the gates and a notes template.
+
 ## Resources
 
 - [Hookdeck documentation](https://hookdeck.com/docs)

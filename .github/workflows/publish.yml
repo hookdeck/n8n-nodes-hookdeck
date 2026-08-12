@@ -1,65 +1,45 @@
-# Publishes this n8n community node package to npm on every version tag push.
+# Publishes to npm when a GitHub Release is published.
 #
-# Starting May 1 2026, n8n requires all community nodes to be published via
-# GitHub Actions with npm provenance statements. This workflow satisfies that
-# requirement. Provenance lets anyone cryptographically verify that a package
-# was built by this exact workflow, from this exact repository and commit.
+# The release is the source of truth: creating it makes the tag, carries the
+# notes people actually read, and starts this workflow. Nothing publishes from
+# a bare tag push, and nothing publishes from a laptop.
 #
-# ─── PREREQUISITES ─────────────────────────────────────────────────────────────
+# See README § Releasing for the steps, and skills/n8n-nodes-hookdeck-release
+# for the agent-assisted version — choosing the version, drafting the notes,
+# and the gates that have to pass first.
 #
-# @n8n/node-cli ≥ 0.23.0 is required. Earlier versions do not support the
-# provenance flag passed by `npm run release` in CI, and the publish step will
-# fail. Check the version installed in this project with:
+# ─── WHY A RELEASE AND NOT A TAG ───────────────────────────────────────────────
 #
-#   npm list @n8n/node-cli
+# n8n requires community nodes to be published from GitHub Actions with an npm
+# provenance statement (mandatory since 1 May 2026). Provenance ties the package
+# to this repository, this workflow and this commit, so it has to run here.
 #
-# To upgrade, add @n8n/node-cli@latest as a dev dependency using your package manager.
+# Driving it from a published Release rather than a tag push means the version,
+# the notes and the artifact are decided in one place, and a draft release can be
+# prepared and reviewed before anything reaches npm.
 #
 # ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
 #
 # Option A — OIDC Trusted Publishing (recommended, no long-lived secrets):
-#   1. Log in to npmjs.com and open your package's settings.
-#   2. Under "Publish access" → "Trusted Publishers", click "Add a publisher".
-#   3. Select GitHub Actions and fill in:
-#        Repository owner: <your-github-username-or-org>
-#        Repository name:  <your-repo-name>
+#   1. On npmjs.com open the package settings → "Publish access" → "Trusted
+#      Publishers" → "Add a publisher".
+#   2. Select GitHub Actions and fill in:
+#        Repository owner: hookdeck
+#        Repository name:  n8n-nodes-hookdeck
 #        Workflow name:    publish.yml
-#        Environment:      (leave blank unless you use GitHub Environments)
-#   4. Leave the NPM_TOKEN secret unset in this repository. GitHub's OIDC
-#      token is used instead — no secret ever touches your repo settings.
+#        Environment:      (leave blank)
+#   3. Leave NPM_TOKEN unset. GitHub's OIDC token is used instead.
 #
 # Option B — npm Automation Token (fallback):
-#   1. On npmjs.com: Access Tokens → Generate New Token → Granular Access Token.
-#      Scope it to this package with "Read and write" publish permission.
-#   2. In GitHub: Settings → Secrets and variables → Actions → New secret.
-#      Name it NPM_TOKEN and paste the token value.
+#   Set an NPM_TOKEN repository secret with a granular token scoped to this
+#   package with read and write publish permission.
 #
-# Both options work with --provenance. Provenance is signed by GitHub's OIDC
-# infrastructure regardless of how npm authentication is handled.
-#
-# ─── TAG CONVENTION ────────────────────────────────────────────────────────────
-#
-# This workflow triggers on tags matching "*.*.*" (e.g. 0.2.0).
-# If you prefer tags with a "v" prefix (e.g. v0.2.0), change the filter to:
-#   tags: ['v*.*.*']
-#
-# ─── RELEASE PROCESS ───────────────────────────────────────────────────────────
-#
-# Run the following command locally to start an interactive release:
-#
-#   npm run release
-#
-# This will lint, build, prompt for a version bump, update the changelog,
-# commit, tag, and push — which triggers this workflow to publish to npm.
-
+# Provenance is signed by GitHub either way.
 name: Publish
 
 on:
-  push:
-    tags:
-      # Matches 0.1.0, 1.2.3, 2.0.0-rc.1, etc.
-      # See "TAG CONVENTION" above if you prefer tags with a "v" prefix.
-      - '*.*.*'
+  release:
+    types: [published]
 
 jobs:
   publish:
@@ -67,33 +47,62 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      # Required to mint an OIDC token for npm provenance attestation.
+      # Required to mint an OIDC token for the npm provenance attestation.
       id-token: write
       # Scoped down from the default (write) for least-privilege publishing.
       contents: read
 
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The release tag, not the default branch: publish exactly what was
+          # released, even if main has moved on since.
+          ref: ${{ github.event.release.tag_name }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 'lts/*'
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: 'npm ci'
 
-      - name: Release
-        # Publishes to npm with a provenance attestation (requires id-token: write above).
-        # Lint and build run automatically as part of the release process.
-        #
-        # Option A (OIDC): leave NPM_TOKEN unset — the token step is skipped and
-        #   npm uses the OIDC exchange instead.
-        # Option B (token): set NPM_TOKEN in repo secrets — it is written to
-        #   .npmrc here before publishing.
+      # The tag is the version. package.json is not bumped in a commit, so there
+      # is no release commit to land and no window where the two disagree.
+      # `--allow-same-version` keeps a first release working when package.json
+      # already carries the number.
+      - name: Set the version from the release tag
         run: |
-          [ -n "$NPM_TOKEN" ] && npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
-          npm run release
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Publishing $VERSION"
+          npm version --no-git-tag-version --allow-same-version "$VERSION"
+
+      # The same checks CI runs, repeated here because this is the last point at
+      # which a bad package can be stopped. `scan` is n8n's own verification rule
+      # set: failing it here means it would fail review too.
+      - name: Verify before publishing
+        run: |
+          npm run lint
+          npm run scan
+          npm run build
+          node scripts/verify-package-load.mjs
+          node --test "test/unit.test.mjs"
+
+      # A pre-release tag (0.2.0-beta.1) publishes under `beta`, so `npm install
+      # @hookdeck/n8n-nodes-hookdeck` keeps resolving to the last stable version.
+      - name: Choose the npm dist-tag
+        id: disttag
+        run: |
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
+            echo "tag=beta" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=latest" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish
+        run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: 'true'
