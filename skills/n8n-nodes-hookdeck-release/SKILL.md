@@ -79,14 +79,19 @@ Two things, easily conflated:
   long-lived npm token. Not required by n8n.
 
 Trusted publishers are configured on an **existing** package's settings page, so
-a package that has never been published cannot use OIDC for its first release.
-The first release needs an `NPM_TOKEN` secret; provenance still applies, so it
-still satisfies n8n. After that, add the trusted publisher on npmjs.com and
-delete the secret — the workflow's auth step is skipped when it is absent and npm
-falls back to OIDC.
+a package that has never been published cannot use OIDC for its first publish.
+That was resolved once, by claiming the name with a throwaway `0.0.1` published
+by hand and immediately deprecating it — see README § Releasing, "Bootstrapping
+the package". It is not something a release needs to repeat.
 
-Do not leave an empty `NPM_TOKEN` secret in place. An empty credential takes
+Releases use OIDC. There should be **no `NPM_TOKEN` secret** on the repository.
+The workflow has a token step as a fallback, skipped when the secret is absent;
+do not leave an empty secret in place, because an empty credential takes
 precedence over OIDC and the publish fails.
+
+Publishing by hand is blocked: `prepublishOnly` runs `n8n-node prerelease`,
+which exits unless `RELEASE_MODE` is set. Do not set it to work around a failing
+release — a hand publish carries no provenance, which is what n8n requires.
 
 ## What breaks an n8n node
 

@@ -590,12 +590,6 @@ npm provenance statement, so the publish has to happen in CI.
 
    Or use the GitHub UI — Releases → Draft a new release.
 
-The first release needs an `NPM_TOKEN` repository secret, because npm's trusted
-publishers are configured on a package that already exists. After that, add the
-trusted publisher on npmjs.com and delete the secret — the workflow then uses
-OIDC. Either way the package is published with provenance, which is what n8n
-requires.
-
 Publishing then happens automatically:
 [`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
 version from it, re-runs lint, the verification scan, the build, the load check
@@ -604,6 +598,33 @@ and the unit tests, and publishes with provenance. A release marked
 
 There is no release commit — the tag is the version, and `package.json` in git
 is not bumped to match.
+
+### Bootstrapping the package (once, already done after the first release)
+
+npm configures trusted publishers on a package that already exists, so a package
+that has never been published cannot use OIDC for its first publish. The name is
+claimed by hand once, and everything anyone installs is published from CI with
+provenance.
+
+```bash
+npm login
+RELEASE_MODE=true npm publish --access public   # claims the name at 0.0.1
+npm deprecate @hookdeck/n8n-nodes-hookdeck@0.0.1 \
+  "Placeholder to claim the package name. Use 0.1.0 or later."
+```
+
+`RELEASE_MODE` is needed because `prepublishOnly` runs a guard that blocks
+publishing by hand — this is the one sanctioned exception to it.
+
+Then on npmjs.com: the package → Settings → Trusted Publishers → Add a publisher
+→ GitHub Actions, owner `hookdeck`, repository `n8n-nodes-hookdeck`, workflow
+`publish.yml`, environment blank. No `NPM_TOKEN` secret is needed, and none
+should be left in place — an empty credential takes precedence over OIDC and the
+publish fails.
+
+That throwaway `0.0.1` is the only version ever published without provenance,
+and it is deprecated the moment it exists. `0.1.0` onwards go through
+`publish.yml`.
 
 ### Choosing the version
 

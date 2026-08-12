@@ -34,17 +34,13 @@
 #
 # Trusted publishers are configured on an *existing* package's settings page, so
 # a package that has never been published cannot use OIDC for its first release.
+# The name is claimed with a throwaway version published by hand, which is then
+# deprecated — see README § Releasing, "Bootstrapping the package". Every version
+# anyone installs is published from here, with provenance.
 #
-#   First release:  set an NPM_TOKEN repository secret — a granular token scoped
-#                   to @hookdeck with read and write access. Provenance still
-#                   applies, so this satisfies n8n.
-#
-#   After that:     on npmjs.com open the package → Settings → "Trusted
-#                   Publishers" → "Add a publisher" → GitHub Actions, with
-#                   owner `hookdeck`, repository `n8n-nodes-hookdeck`, workflow
-#                   `publish.yml`, environment blank. Then delete the NPM_TOKEN
-#                   secret: the step below is skipped when it is absent and npm
-#                   falls back to OIDC on its own.
+# The NPM_TOKEN step below is a fallback, not the normal path. It is skipped when
+# the secret is absent, which is how OIDC gets used. Do not leave an empty secret
+# in place: an empty credential takes precedence over OIDC and the publish fails.
 #
 # OIDC needs npm >= 11.5.1 on Node >= 22.14, which `lts/*` satisfies. The guard
 # below fails loudly rather than silently falling back if that ever stops being
@@ -129,5 +125,10 @@ jobs:
         if: ${{ secrets.NPM_TOKEN != '' }}
         run: npm config set //registry.npmjs.org/:_authToken "${{ secrets.NPM_TOKEN }}"
 
+      # RELEASE_MODE is required: `prepublishOnly` runs `n8n-node prerelease`,
+      # which exits 1 without it. That guard exists to stop anyone publishing by
+      # hand, and this is the sanctioned path through it.
       - name: Publish
         run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
+        env:
+          RELEASE_MODE: 'true'
