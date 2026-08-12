@@ -23,7 +23,7 @@ the node itself:
   failed run so Hookdeck retries the run itself; Async mode exposes
   **Event > Retry** as a workflow step for error branches, plus
   `isLastAttempt` for dead-letter routing.
-- **Signature verification at the edge.** 150 source types (Stripe, Shopify,
+- **Signature verification at the edge.** 151 source types (Stripe, Shopify,
   GitHub, Twilio, and more), each with that platform's own scheme, plus HMAC /
   API key / basic auth for generic sources. Verification runs once you supply
   the platform's signing secret — a source without one accepts unsigned

@@ -6,11 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-12
+
+First release. `0.0.1` was a placeholder published by hand to claim the package
+name so trusted publishing could be configured, and is deprecated.
+
 ### Added
 
 - **Hookdeck Trigger** node. On publish it upserts a Hookdeck connection whose
   destination is this workflow's webhook URL, and tears it down on deactivation.
-  Supports 150 source types, HMAC / API key / basic auth verification for
+  Supports 151 source types, HMAC / API key / basic auth verification for
   generic sources, and a JSON escape hatch for schemes the fields cannot express.
 - Connection rules applied by default, whether or not Options is opened: five
   exponential retries a minute apart on `500-599` and `429`, and a 60 second
@@ -142,4 +147,5 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   The token step that expression guarded is gone entirely: npm exchanges the
   Actions OIDC token itself, so there was nothing for it to do.
 
-[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/commits/main
+[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/hookdeck/n8n-nodes-hookdeck/releases/tag/v0.1.0
