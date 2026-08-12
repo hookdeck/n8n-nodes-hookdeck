@@ -16,6 +16,9 @@
 		"esModuleInterop": true,
 		"resolveJsonModule": true,
 		"incremental": true,
+		// Outside outDir: it defaults into dist/, where it is build state that got
+		// published as 206kB of the 0.0.1 tarball.
+		"tsBuildInfoFile": "./node_modules/.cache/tsconfig.tsbuildinfo",
 		"declaration": true,
 		"sourceMap": true,
 		"skipLibCheck": true,

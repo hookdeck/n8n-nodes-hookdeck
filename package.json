@@ -33,8 +33,10 @@
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
+	"comment:files": "An allowlist, not \"dist\": n8n-node build globs **/*.{png,svg} from the repo root into dist, which shipped a 299kB README screenshot in 0.0.1. Adding a path here without adding it to \"n8n\" below is fine; the reverse fails scripts/verify-package-load.mjs.",
 	"files": [
-		"dist"
+		"dist/nodes",
+		"dist/credentials"
 	],
 	"n8n": {
 		"n8nNodesApiVersion": 1,

@@ -14,8 +14,9 @@
  */
 import { readFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { dirname, resolve, basename, join } from 'node:path';
+import { dirname, resolve, relative, basename, join, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -24,6 +25,16 @@ const require = createRequire(import.meta.url);
 
 const failures = [];
 const checks = [];
+
+/**
+ * Every file n8n reads at runtime, collected as the checks below resolve them.
+ * Compared against the packed file list at the end: `dist` on disk is not what
+ * users install, and the two drifted once already — `files` shipped a 299kB
+ * screenshot the build had swept into dist, and nothing noticed because every
+ * check ran against dist.
+ */
+const runtimeFiles = new Set();
+const needsPacking = (absolute) => runtimeFiles.add(relative(ROOT, absolute).split(sep).join('/'));
 
 const check = (ok, label, detail) => {
 	checks.push({ ok, label });
@@ -47,6 +58,7 @@ const loadDeclared = (paths, kind) => {
 			continue;
 		}
 		check(true, `${kind} ${relative} exists`);
+		needsPacking(absolute);
 
 		let module;
 		try {
@@ -98,6 +110,7 @@ for (const { relative, absolute, instance } of nodes) {
 		check(false, `${label} has a codex file beside it`, `expected ${basename(codexPath)}`);
 	} else {
 		check(true, `${label} has a codex file beside it`);
+		needsPacking(codexPath);
 		const codex = JSON.parse(await readFile(codexPath, 'utf8'));
 		const expectedType = `${pkg.name}.${description.name}`;
 		check(
@@ -113,6 +126,7 @@ for (const { relative, absolute, instance } of nodes) {
 		if (typeof icon !== 'string' || !icon.startsWith('file:')) continue;
 		const iconPath = resolve(dirname(absolute), icon.slice('file:'.length));
 		check(existsSync(iconPath), `${label} icon ${icon} resolves`, iconPath);
+		if (existsSync(iconPath)) needsPacking(iconPath);
 	}
 
 	// Every credential a node asks for has to be one this package ships, or n8n
@@ -133,6 +147,59 @@ for (const { instance } of credentials) {
 		Array.isArray(instance.properties) && instance.properties.length > 0,
 		`credential ${instance.name} declares properties`,
 	);
+}
+
+// ─── What actually ships ───────────────────────────────────────────────────────
+//
+// `files` in package.json is an allowlist, so adding a node without extending it
+// produces a package that loads perfectly from dist and is missing from n8n once
+// installed. Ask npm for the real file list rather than reasoning about globs.
+//
+// `--ignore-scripts` because npm pack runs prepack/prepare, and this script is
+// itself run from the build and release paths.
+let packedFiles;
+let packed;
+try {
+	const output = execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+		cwd: ROOT,
+		encoding: 'utf8',
+		stdio: ['ignore', 'pipe', 'ignore'],
+	});
+	packed = JSON.parse(output)[0];
+	packedFiles = new Set(packed.files.map((f) => f.path));
+} catch (error) {
+	check(false, 'npm pack lists the package contents', error.message);
+}
+
+if (packedFiles) {
+	for (const file of [...runtimeFiles].sort()) {
+		check(
+			packedFiles.has(file),
+			`${file} is included in the published package`,
+			'not matched by "files" in package.json',
+		);
+	}
+
+	// Not a correctness failure, so a warning rather than a check — but the 0.0.1
+	// tarball was 71% build leftovers and a README screenshot, and nothing said so.
+	//
+	// Two signals, because the two offenders looked different: `dist/docs/images`
+	// was in the wrong place, and `dist/tsconfig.tsbuildinfo` was in the right
+	// place and simply enormous. npm always adds README, LICENSE and package.json.
+	const ALWAYS_INCLUDED = /^(readme|licen[cs]e|package\.json|changelog)/i;
+	const LARGE_FILE_BYTES = 100_000;
+
+	const misplaced = packed.files
+		.map((f) => f.path)
+		.filter((p) => !ALWAYS_INCLUDED.test(p) && !/^dist\/(nodes|credentials)\//.test(p));
+	const large = packed.files.filter((f) => f.size > LARGE_FILE_BYTES);
+
+	for (const path of misplaced) {
+		console.warn(`⚠️  Packed from outside dist/nodes and dist/credentials: ${path}`);
+	}
+	for (const file of large) {
+		console.warn(`⚠️  Large file in the package: ${file.path} (${Math.round(file.size / 1024)}kB)`);
+	}
 }
 
 const passed = checks.filter((c) => c.ok).length;
