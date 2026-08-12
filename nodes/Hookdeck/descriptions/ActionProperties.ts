@@ -59,7 +59,7 @@ function filterProperty(resource: string, options: INodeProperties[]): INodeProp
 		type: 'collection',
 		placeholder: 'Add Filter',
 		default: {},
-		displayOptions: { show: { resource: [resource], operation: ['getAll'] } },
+		displayOptions: { show: { resource: [resource], operation: ['getAll', 'getCount'] } },
 		options,
 	};
 }
@@ -94,6 +94,12 @@ export const eventProperties: INodeProperties[] = [
 		options: [
 			{ name: 'Cancel', value: 'cancel', description: 'Stop retrying an event', action: 'Cancel an event' },
 			{ name: 'Get', value: 'get', description: 'Retrieve an event', action: 'Get an event' },
+			{
+				name: 'Get Count',
+				value: 'getCount',
+				description: 'Count events up to a limit, since Hookdeck exposes no exact event count',
+				action: 'Count events',
+			},
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many events', action: 'Get many events' },
 			{ name: 'Mute', value: 'mute', description: 'Mute a failed event', action: 'Mute an event' },
 			{ name: 'Retry', value: 'retry', description: 'Retry delivery of an event', action: 'Retry an event' },
@@ -182,6 +188,12 @@ export const issueProperties: INodeProperties[] = [
 		options: [
 			{ name: 'Dismiss', value: 'dismiss', description: 'Ignore an issue', action: 'Dismiss an issue' },
 			{ name: 'Get', value: 'get', description: 'Retrieve an issue', action: 'Get an issue' },
+			{
+				name: 'Get Count',
+				value: 'getCount',
+				description: 'Count issues without listing them',
+				action: 'Count issues',
+			},
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many issues', action: 'Get many issues' },
 			{ name: 'Update', value: 'update', description: 'Change the status of an issue', action: 'Update an issue' },
 		],
@@ -281,6 +293,12 @@ export const connectionProperties: INodeProperties[] = [
 		options: [
 			{ name: 'Delete', value: 'delete', description: 'Delete a connection', action: 'Delete a connection' },
 			{ name: 'Get', value: 'get', description: 'Retrieve a connection', action: 'Get a connection' },
+			{
+				name: 'Get Count',
+				value: 'getCount',
+				description: 'Count connections without listing them',
+				action: 'Count connections',
+			},
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many connections', action: 'Get many connections' },
 			{ name: 'Pause', value: 'pause', description: 'Hold delivery and queue events', action: 'Pause a connection' },
 			{ name: 'Unpause', value: 'unpause', description: 'Resume delivery of queued events', action: 'Unpause a connection' },
@@ -315,6 +333,14 @@ export const sourceProperties: INodeProperties[] = [
 		default: 'getAll',
 		displayOptions: { show: { resource: ['source'] } },
 		options: [
+			{ name: 'Get', value: 'get', description: 'Retrieve a source', action: 'Get a source' },
+			{
+				name: 'Get Count',
+				value: 'getCount',
+				description: 'Count sources without listing them',
+				action: 'Count sources',
+			},
+			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many sources', action: 'Get many sources' },
 			{
 				name: 'Get or Create',
 				value: 'getOrCreate',
@@ -322,8 +348,6 @@ export const sourceProperties: INodeProperties[] = [
 					'Return the source with this name, creating it if it does not exist, and give back its public URL. Safe to re-run, and never overwrites an existing source.',
 				action: 'Get or create a source',
 			},
-			{ name: 'Get', value: 'get', description: 'Retrieve a source', action: 'Get a source' },
-			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many sources', action: 'Get many sources' },
 			{
 				name: 'Get URL',
 				value: 'getUrl',
@@ -396,6 +420,12 @@ export const destinationProperties: INodeProperties[] = [
 		displayOptions: { show: { resource: ['destination'] } },
 		options: [
 			{ name: 'Get', value: 'get', description: 'Retrieve a destination', action: 'Get a destination' },
+			{
+				name: 'Get Count',
+				value: 'getCount',
+				description: 'Count destinations without listing them',
+				action: 'Count destinations',
+			},
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many destinations', action: 'Get many destinations' },
 		],
 	},

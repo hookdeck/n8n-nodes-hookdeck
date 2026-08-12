@@ -138,6 +138,22 @@ export function generateSigningSecret(): string {
 }
 
 /**
+ * Reduce a signature header to the candidate values it carries.
+ *
+ * The header is attacker-controlled and arrives loosely typed: Node's
+ * `IncomingHttpHeaders` allows `string | string[]`, and nothing stops a caller
+ * handing over something else entirely. Anything unrecognised yields no
+ * candidates, so verification refuses rather than throwing — a throw here
+ * becomes a 500, which sits inside the connection's own retry range and would
+ * have Hookdeck redeliver a forged request several times instead of dropping it.
+ */
+function signatureCandidates(value: unknown): string[] {
+	if (typeof value === 'string') return value.split(' ').filter(Boolean);
+	if (Array.isArray(value)) return value.flatMap(signatureCandidates);
+	return [];
+}
+
+/**
  * Verify the HMAC-SHA256 signature Hookdeck attaches to each delivery.
  *
  * The header is tolerated in multi-value form — Hookdeck's own signature header
@@ -147,10 +163,11 @@ export function generateSigningSecret(): string {
  */
 export function verifySignature(
 	rawBody: Buffer | string,
-	signatureHeader: string | undefined,
+	signatureHeader: unknown,
 	signingSecret: string,
 ): boolean {
-	if (!signatureHeader) return false;
+	const candidates = signatureCandidates(signatureHeader);
+	if (candidates.length === 0) return false;
 
 	// Hash the bytes exactly as they arrived. Decoding to a string first would
 	// be wrong for any body that is not valid UTF-8: `Buffer.toString('utf8')`
@@ -160,9 +177,7 @@ export function verifySignature(
 	const expected = createHmac('sha256', signingSecret).update(bytes).digest('base64');
 	const expectedBuffer = Buffer.from(expected);
 
-	return signatureHeader
-		.split(' ')
-		.filter(Boolean)
+	return candidates
 		.some((candidate) => {
 			const candidateBuffer = Buffer.from(candidate);
 			if (candidateBuffer.length !== expectedBuffer.length) return false;

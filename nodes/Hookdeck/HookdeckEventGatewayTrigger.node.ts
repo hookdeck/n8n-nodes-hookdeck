@@ -544,6 +544,16 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 
 		if (shouldVerify) {
 			if (rawBody === undefined) {
+				// Permanent until an operator intervenes, and it answers 500 — which
+				// is inside the connection's own retry range, so Hookdeck will
+				// redeliver on a schedule while the workflow appears merely quiet.
+				// Retryable is right (the events survive, and the fix restores them),
+				// but silence is not: say once, loudly, what is wrong and how to fix
+				// it, or "this workflow receives nothing" has no visible cause.
+				this.logger.error(
+					'Hookdeck Trigger: cannot verify signatures because this n8n instance did not expose the raw request body. Every delivery will fail and be retried until this is resolved. Turn off Options → "Verify Signature" to accept deliveries unverified, or run n8n where the raw body is available.',
+				);
+
 				throw new NodeOperationError(
 					this.getNode(),
 					'Cannot verify the Hookdeck signature: this n8n instance did not expose the raw request body',
@@ -554,7 +564,9 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				);
 			}
 
-			const headers = this.getHeaderData() as Record<string, string | undefined>;
+			// Not narrowed to string: a header can arrive as an array, and claiming
+			// otherwise is how a malformed value becomes a throw instead of a refusal.
+			const headers = this.getHeaderData() as Record<string, unknown>;
 			const signature = headers[SIGNATURE_HEADER];
 
 			// A delivery does not say whether it belongs to the test or production

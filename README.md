@@ -427,12 +427,12 @@ Hookdeck dashboard.
 | Resource | Operations |
 | --- | --- |
 | Attempt | Get, Get Many |
-| Connection | Get, Get Many, Delete, Pause, Unpause |
-| Destination | Get, Get Many |
-| Event | Get, Get Many, Retry, Mute, Cancel |
-| Issue | Get, Get Many, Update, Dismiss |
+| Connection | Get, Get Many, Get Count, Delete, Pause, Unpause |
+| Destination | Get, Get Many, Get Count |
+| Event | Get, Get Many, Get Count, Retry, Mute, Cancel |
+| Issue | Get, Get Many, Get Count, Update, Dismiss |
 | Request | Get, Get Many, Retry |
-| Source | Get or Create, Get, Get Many, Get URL |
+| Source | Get or Create, Get, Get Many, Get Count, Get URL |
 
 **Source → Get or Create** returns the named source, creating it only if it is
 not there, and gives back its public URL. Source names are unique within a
@@ -443,6 +443,15 @@ stop doing. Getting first avoids both.
 
 **Get Many** supports **Return All**, which walks Hookdeck's pagination, or a
 **Limit**.
+
+**Get Count** answers "how many" without listing them, and takes the same
+filters. Connections, destinations, issues and sources are counted exactly and
+return `isAtLeast: false`. Events are different — Hookdeck exposes no event
+count — so they are counted by paging to a ceiling and returning
+`isAtLeast: true` when that ceiling is reached, alongside `countedUpTo`. Treat
+that as a floor, not a total. This matters most when the node is used as an AI
+agent tool: a page size reported as a count is a number the agent will state as
+fact.
 
 ### Compatibility
 

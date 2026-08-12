@@ -1597,6 +1597,105 @@ test('action node returns the source URL for Get URL', async () => {
 	assert.equal(output[0][0].json.url, 'https://hkdk.events/abc');
 });
 
+test('a malformed signature header refuses rather than throwing', () => {
+	// The header is attacker-controlled. A throw becomes a 500, which sits inside
+	// the connection's own retry range — so a forged request would be redelivered
+	// several times instead of dropped on the first refusal.
+	const body = '{"a":1}';
+	for (const hostile of [
+		['sig-a', 'sig-b'],
+		[],
+		12345,
+		{ nope: true },
+		null,
+		Buffer.from([0xc3, 0x28]).toString('latin1'),
+		'\u0000\u0001',
+	]) {
+		assert.doesNotThrow(() => verifySignature(body, hostile, 'secret'), String(hostile));
+		assert.equal(verifySignature(body, hostile, 'secret'), false, String(hostile));
+	}
+});
+
+test('a signature arriving as an array is still checked', () => {
+	// Node joins duplicate headers into a string today, but IncomingHttpHeaders
+	// permits an array and nothing in the type system stops one arriving.
+	const secret = 'secret';
+	const body = '{"a":1}';
+	const good = createHmac('sha256', secret).update(Buffer.from(body)).digest('base64');
+
+	assert.equal(verifySignature(body, [good], secret), true);
+	assert.equal(verifySignature(body, ['nope', good], secret), true);
+	assert.equal(verifySignature(body, ['nope', 'still-nope'], secret), false);
+});
+
+test('counts come from the count endpoint where Hookdeck has one', async () => {
+	for (const resource of ['connection', 'destination', 'issue', 'source']) {
+		const { calls, output } = await runAction(
+			{ resource, operation: 'getCount', filters: {} },
+			{ count: 42 },
+		);
+		assert.match(calls[0].url, /\/count$/, resource);
+		assert.equal(output[0][0].json.count, 42);
+		// An exact count must not be reported as a floor.
+		assert.equal(output[0][0].json.isAtLeast, false);
+	}
+});
+
+test('event counts are reported as a floor, because Hookdeck has no events count', async () => {
+	// /events/count does not exist. A paged count read as a total is how a caller
+	// states a page size as a fact, so the ceiling is declared rather than hidden.
+	const { calls, output } = await runAction(
+		{ resource: 'event', operation: 'getCount', filters: { status: 'FAILED' } },
+		// A full page plus a cursor, so paging continues until it hits the ceiling.
+		{
+			models: Array.from({ length: 250 }, (_, n) => ({ id: `evt_${n}` })),
+			pagination: { next: 'cursor' },
+		},
+	);
+
+	assert.ok(!calls[0].url.endsWith('/count'), 'must not call a non-existent endpoint');
+	const result = output[0][0].json;
+	assert.equal(result.isAtLeast, true);
+	assert.equal(result.count, result.countedUpTo);
+	assert.ok(result.countedUpTo > 0);
+});
+
+test('a small event count is exact, not flagged as a floor', async () => {
+	const { output } = await runAction(
+		{ resource: 'event', operation: 'getCount', filters: {} },
+		{ models: [{ id: 'evt_1' }, { id: 'evt_2' }], pagination: {} },
+	);
+	assert.equal(output[0][0].json.count, 2);
+	assert.equal(output[0][0].json.isAtLeast, false);
+});
+
+test('an event count ignores the page-size count on a list response', async () => {
+	// The /events list response carries its own `count`, and it is the size of
+	// the page just fetched, not a total. Reading it would answer "how many" with
+	// the page size — the exact shape of the bug that had a sibling plugin report
+	// "1 open issue" when there were four.
+	const { output } = await runAction(
+		{ resource: 'event', operation: 'getCount', filters: {} },
+		{ count: 1, models: [{ id: 'evt_1' }, { id: 'evt_2' }, { id: 'evt_3' }], pagination: {} },
+	);
+
+	assert.equal(output[0][0].json.count, 3, 'must count the models, not echo the page count');
+	assert.equal(output[0][0].json.isAtLeast, false);
+});
+
+test('an exact count comes from the count endpoint, never a list', async () => {
+	// Guards the boundary in the other direction: a countable resource must hit
+	// /count, so it cannot silently fall back to a page size.
+	for (const resource of ['connection', 'destination', 'issue', 'source']) {
+		const { calls } = await runAction(
+			{ resource, operation: 'getCount', filters: {} },
+			{ count: 7 },
+		);
+		assert.equal(calls.length, 1, resource);
+		assert.match(calls[0].url, /\/count$/, resource);
+	}
+});
+
 test('action node rejects an unknown resource', async () => {
 	await assert.rejects(
 		() => runAction({ resource: 'nonsense', operation: 'get', id: 'x' }),
