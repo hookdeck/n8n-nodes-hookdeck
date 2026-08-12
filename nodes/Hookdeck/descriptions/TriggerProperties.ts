@@ -21,24 +21,10 @@ export const triggerProperties: INodeProperties[] = [
 			// the built-in chat or form trigger. This notice sits beside that panel,
 			// so it is the only place a local n8n can be told why nothing arrives.
 displayName:
-				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish. If Hookdeck cannot reach this n8n — running it locally, or behind NAT — events are delivered through the <a href="https://hookdeck.com/docs/cli" target="_blank">Hookdeck CLI</a> instead, and <b>Local Delivery Command</b> below has the command to run.',
+				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish. If Hookdeck cannot reach this n8n — running it locally, or behind NAT — events are delivered through the <a href="https://hookdeck.com/docs/cli" target="_blank">Hookdeck CLI</a> instead. Keep <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> running alongside n8n, or nothing will arrive.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
-		},
-		{
-			// A dropdown purely to display a computed string, because n8n gives a node
-			// no other way to show one: every text field in a node description is
-			// static, and hint messages are not expression-evaluated. Opening this
-			// calls the server, which knows the instance URL and the source name.
-			displayName: 'Local Delivery Command',
-			name: 'cliCommand',
-			type: 'options',
-			default: '',
-			typeOptions: { loadOptionsMethod: 'getCliCommand' },
-			description:
-				'Open to see the Hookdeck CLI command for this instance and source. Only relevant when Hookdeck cannot reach this n8n.',
-			options: [],
 		},
 		{
 			displayName: 'Source',
