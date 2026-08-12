@@ -68,6 +68,55 @@ To deliberately reconfigure an existing source, turn on **Options → Update
 Existing Source**. That applies this node's settings to the source, and to every
 connection fed by it.
 
+### How events reach n8n
+
+The trigger picks one of two delivery routes when you activate the workflow,
+based on whether Hookdeck can reach the address n8n advertises.
+
+| n8n's webhook URL | Destination | How events arrive |
+| --- | --- | --- |
+| Publicly reachable — n8n Cloud, or self-hosted with a public address | `HTTP` | Hookdeck makes a request to n8n directly |
+| Not reachable — a laptop, or an instance behind NAT | `CLI` | Hookdeck sends events to `hookdeck listen`, which forwards them to n8n |
+
+There is nothing to configure. Both routes sign deliveries the same way, so
+signature verification behaves identically and the workflow receives the same
+item either way.
+
+This is about reachability, not about development. A self-hosted n8n behind NAT
+uses the CLI route in production just as a laptop does.
+
+#### Running the CLI route
+
+The node writes the exact commands to the workflow log on activation. Run them
+alongside n8n:
+
+```bash
+hookdeck ci --api-key <your Event Gateway project API key>
+hookdeck listen 5678 <source> <connection> --device-name n8n-<host>-<instance>
+```
+
+`hookdeck ci` matters: `hookdeck listen` otherwise uses whichever project the
+CLI was last logged into, and pointing it at the wrong one looks like the node
+is broken. `--device-name` keeps two n8n instances from being treated as one
+listener restarting.
+
+#### What the CLI route cannot do
+
+- **No Delivery Rate Limit and no Delivery Group.** Hookdeck supports these on
+  directly reachable destinations only. If they are set, the node does not send
+  them and says so in the log.
+- **Events are not queued indefinitely.** If `hookdeck listen` is not running,
+  Hookdeck buffers for a few seconds and keeps the session eligible for two
+  minutes, then the delivery fails. The connection's retry rule then applies —
+  five exponential retries from a minute apart by default, so roughly half an
+  hour of recovery. Beyond that an event has to be retried by hand.
+
+That last point decides whether this route suits production, and the answer
+depends on how you run the CLI. A terminal window on a laptop is not production
+whatever the retry settings. A supervised process on a server — a systemd unit,
+or a container with a restart policy — keeps outages to seconds, which the retry
+rule covers.
+
 ### Parameters
 
 | Parameter | Description |
@@ -388,44 +437,18 @@ script checks and refuses otherwise. If your default is older, install one
 (`asdf install nodejs 22.23.2`) and point `NODE_BIN` at it rather than changing
 the machine default.
 
-The trigger cannot be exercised against `localhost`, because Hookdeck delivers
-over the public internet and the node rejects unreachable addresses up front.
-Expose n8n and tell it the public address:
+No tunnel is needed. Activate the workflow; the node sees that Hookdeck cannot
+reach this n8n, provisions a CLI destination, and writes the commands to run to
+the workflow log:
 
 ```bash
-cloudflared tunnel --url http://localhost:5678
-WEBHOOK_URL=https://<subdomain>.trycloudflare.com ./scripts/run-n8n.sh
+hookdeck ci --api-key <your Event Gateway project API key>
+hookdeck listen 5678 <source> <connection> --device-name n8n-<host>-<instance>
 ```
 
-#### What about `hookdeck listen`?
-
-The obvious question, given this is a Hookdeck node — and the answer is not
-"it cannot work", it is "this node currently gets in the way".
-
-`hookdeck listen` will happily deliver a source's events to a local n8n. It
-creates its own connection with a `CLI` destination and streams matching events
-to your port, so `hookdeck listen 5678 my-source --path /webhook/<id>` reaches a
-workflow running on `localhost`. That part is fine.
-
-What stops it being a drop-in replacement for the tunnel is this node, in two
-places:
-
-- **The reachability guard rejects `localhost` at activation.** The trigger
-  provisions an `HTTP` destination pointing at the URL n8n advertises, and
-  refuses up front if Hookdeck could not reach it. So the workflow cannot be
-  activated at all, whatever the CLI is doing alongside it. This is our own
-  check, not a Hookdeck limitation.
-- **Signatures are applied by the destination, not the source.** The trigger
-  signs deliveries with a secret it puts on *its* destination as
-  `CUSTOM_SIGNATURE`. Events arriving via the CLI's destination carry no
-  `x-hookdeck-n8n-signature`, so the trigger answers `401` unless Verify
-  Signature is turned off.
-
-Net effect: the CLI can get events into a local n8n, but not through the path
-this node provisions — so it exercises the workflow without exercising the
-node's own delivery contract. Until that changes, use a tunnel for developing
-the trigger itself, and reach for `hookdeck listen` when the workflow starts
-from n8n's own Webhook node.
+A tunnel still works if you prefer one — set `WEBHOOK_URL` to the public address
+before starting n8n and the node provisions an HTTP destination instead. See
+[How events reach n8n](#how-events-reach-n8n) for what differs between the two.
 
 ## Resources
 

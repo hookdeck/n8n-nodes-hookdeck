@@ -10,6 +10,7 @@ import type { IDataObject, IHookFunctions } from 'n8n-workflow';
 import { NodeOperationError } from 'n8n-workflow';
 
 import { SIGNATURE_HEADER } from './Delivery';
+import { webhookPathFor } from './Naming';
 import { SOURCE_TYPE_AUTH } from './SourceTypes';
 
 /** Field a platform's verification secret belongs in. */
@@ -129,31 +130,64 @@ export function buildSourceConfig(
 }
 
 /**
- * Sign deliveries into n8n with a secret this node owns.
+ * Options that only an HTTP destination can honour.
  *
- * CUSTOM_SIGNATURE is used rather than HOOKDECK_SIGNATURE because the secret is
- * generated and stored here, so verification needs no extra API call to look up
- * a project-wide signing key.
+ * Hookdeck gives the CLI destination type `CUSTOM_CLI_PATH` and nothing else;
+ * `MAX_DELIVERY_RATE` and `delivery_groups` belong to HTTP. Sending them to a
+ * CLI destination is not an error to fail on, but a user who set a rate limit
+ * deserves to be told it is not in force.
  */
-export function buildDestinationConfig(
+export function optionsUnsupportedOverCli(options: IDataObject): string[] {
+	const unsupported: string[] = [];
+	if (options.rateLimit) unsupported.push('Delivery Rate Limit');
+	if (options.deliveryGroupKey) unsupported.push('Delivery Group Key');
+	return unsupported;
+}
+
+/**
+ * Describe the destination Hookdeck should deliver this workflow's events to.
+ *
+ * Two shapes, chosen by whether Hookdeck can reach n8n:
+ *
+ * - `HTTP` — Hookdeck makes a request to n8n's webhook URL. Needs n8n to be
+ *   reachable from the public internet.
+ * - `CLI` — `hookdeck listen` holds a connection open from the operator's
+ *   machine and Hookdeck sends events down it. Nothing has to reach *in*, which
+ *   is what makes a local or NAT'd n8n work at all.
+ *
+ * Both are signed identically. CUSTOM_SIGNATURE is used rather than
+ * HOOKDECK_SIGNATURE because the secret is generated and stored here, so
+ * verification needs no extra API call to look up a project-wide signing key —
+ * and a CLI destination accepts it exactly as an HTTP one does, so the delivery
+ * the workflow verifies is the same either way.
+ */
+export function buildDestination(
 	webhookUrl: string,
 	signingSecret: string,
 	options: IDataObject,
-): IDataObject {
-	const config: IDataObject = {
-		url: webhookUrl,
+	viaCli: boolean,
+): { type: 'HTTP' | 'CLI'; config: IDataObject } {
+	const auth = {
 		auth_type: 'CUSTOM_SIGNATURE',
 		auth: {
 			key: SIGNATURE_HEADER,
 			signing_secret: signingSecret,
 		},
-		// Hookdeck appends the source request's path to the destination URL unless
+		// Hookdeck appends the source request's path to the destination unless
 		// this is set, and it defaults to false. n8n matches its webhook path
 		// exactly, so a provider posting to <source-url>/events would be delivered
 		// to <webhook-url>/events and 404 — then retry until the event is
 		// exhausted. Nothing here benefits from path forwarding.
 		path_forwarding_disabled: true,
 	};
+
+	if (viaCli) {
+		// Only the path: the CLI supplies the host and port when it connects, and
+		// the rate limiting options below are not part of this destination type.
+		return { type: 'CLI', config: { path: webhookPathFor(webhookUrl), ...auth } };
+	}
+
+	const config: IDataObject = { url: webhookUrl, ...auth };
 
 	const rateLimit = options.rateLimit as number | undefined;
 	if (rateLimit) {
@@ -177,7 +211,7 @@ export function buildDestinationConfig(
 		};
 	}
 
-	return config;
+	return { type: 'HTTP', config };
 }
 
 /**

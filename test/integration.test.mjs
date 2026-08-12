@@ -64,7 +64,13 @@ function liveHookContext({ webhookUrl, staticData, params }) {
 		getWorkflow: () => ({ id: `it${RUN_ID}` }),
 		getNode: () => ({ id: 'node1', name: 'Hookdeck Event Gateway Trigger' }),
 		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),
-		logger: { debug() {}, warn: (message) => warnings.push(message), error() {} },
+		getInstanceId: () => 'inst12345678abcdef',
+		logger: {
+			debug() {},
+			warn: (message) => warnings.push(message),
+			error() {},
+			info: (message) => warnings.push(message),
+		},
 		helpers: {
 			async httpRequestWithAuthentication(_credentialType, options) {
 				const url = new URL(options.url);
@@ -208,4 +214,48 @@ test('provisioning a new source creates it as configured', { skip }, async (t) =
 	// source does.
 	assert.match(models[0].url, /^https:\/\/hkdk\.events\//);
 	assert.deepEqual(ctx.warnings, []);
+});
+
+test('an unreachable n8n provisions a CLI destination Hookdeck accepts', { skip }, async (t) => {
+	// The unit suite proves the node *sends* a CLI destination. Only the API can
+	// confirm Hookdeck accepts that shape — a CLI destination rejects the rate
+	// limiting fields an HTTP one takes, so getting this wrong fails activation.
+	const sourceName = `n8n-it-cli-${RUN_ID}`;
+	t.after(() => cleanUp(sourceName));
+
+	const ctx = liveHookContext({
+		// Deliberately unreachable, which is the whole point.
+		webhookUrl: `http://localhost:5678/webhook/${RUN_ID}/webhook`,
+		staticData: {},
+		params: {
+			source: sourceName,
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			// Set the options a CLI destination cannot honour, to prove they are
+			// dropped rather than sent and rejected.
+			options: { rateLimit: 10, deliveryGroupKey: 'body.id' },
+		},
+	});
+
+	const { create } = new HookdeckEventGatewayTrigger().webhookMethods.default;
+	await create.call(ctx);
+
+	const { models } = await api('GET', `/connections?limit=100`);
+	const connection = models.find((c) => c.source?.name === sourceName);
+	assert.ok(connection, 'connection was not created');
+
+	assert.equal(connection.destination.type, 'CLI');
+	assert.equal(connection.destination.config.path, `/webhook/${RUN_ID}/webhook`);
+	assert.equal(connection.destination.config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.equal(connection.destination.config.url, undefined);
+	assert.equal(connection.destination.config.rate_limit, undefined);
+	assert.equal(connection.destination.config.delivery_groups, undefined);
+
+	// Retries are the only thing that recovers an event delivered while the CLI
+	// was down, so they must be on this connection too.
+	assert.ok(connection.rules.some((r) => r.type === 'retry'), 'no retry rule on the CLI connection');
+
+	const setup = ctx.warnings.join('\n');
+	assert.match(setup, /hookdeck listen 5678/);
+	assert.match(setup, /Delivery Rate Limit and Delivery Group Key are not applied/);
 });

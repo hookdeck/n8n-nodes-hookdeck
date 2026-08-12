@@ -11,7 +11,12 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import { buildDestinationConfig, buildRules, buildSourceConfig } from './ConnectionPayload';
+import {
+	buildDestination,
+	buildRules,
+	buildSourceConfig,
+	optionsUnsupportedOverCli,
+} from './ConnectionPayload';
 import {
 	DEFAULT_HEADER_PREFIX,
 	SIGNATURE_HEADER,
@@ -22,7 +27,13 @@ import {
 	verifySignature,
 } from './Delivery';
 import { HOOKDECK_DASHBOARD_URL, hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
-import { buildResourceName, describeUnreachableWebhookUrl, sanitizeName } from './Naming';
+import {
+	buildDeviceName,
+	buildResourceName,
+	describeUnreachableWebhookUrl,
+	localPortFor,
+	sanitizeName,
+} from './Naming';
 import { registrationFor } from './Registration';
 import type { HookdeckStaticData } from './Registration';
 import { triggerProperties } from './descriptions/TriggerProperties';
@@ -91,6 +102,35 @@ function warnIgnoredSourceConfig(
 	);
 }
 
+/**
+ * The commands that connect a not-publicly-reachable n8n to Hookdeck.
+ *
+ * `hookdeck ci` comes first deliberately: `hookdeck listen` otherwise uses
+ * whichever project the CLI was last logged into, and picking the wrong one
+ * fails in a way that looks like the node is broken rather than the CLI being
+ * pointed elsewhere.
+ */
+function describeCliSetup(
+	this: IHookFunctions,
+	webhookUrl: string,
+	sourceName: string,
+	connectionName: string,
+	reason: string | undefined,
+): string {
+	const deviceName = buildDeviceName(webhookUrl, this.getInstanceId());
+	const port = localPortFor(webhookUrl);
+
+	return [
+		`Hookdeck Event Gateway Trigger: ${reason ?? 'This n8n is not reachable from the public internet.'}`,
+		'Events will be delivered through the Hookdeck CLI. Run these alongside n8n:',
+		'',
+		'  hookdeck ci --api-key <your Event Gateway project API key>',
+		`  hookdeck listen ${port} ${sourceName} ${connectionName} --device-name ${deviceName}`,
+		'',
+		'Events arriving while the CLI is not running will fail and be retried; they are not queued indefinitely.',
+	].join('\n');
+}
+
 export class HookdeckEventGatewayTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Hookdeck Event Gateway Trigger',
@@ -104,7 +144,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		// "Go to Hookdeck and create an event" for webhook triggers and ignores
 		// whatever is set here, so anything put in it never reaches the user.
 		activationMessage:
-			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider.',
+			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, the workflow log has the hookdeck listen command needed to receive events.',
 		defaults: {
 			name: 'Hookdeck Event Gateway Trigger',
 		},
@@ -260,17 +300,13 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 					throw new NodeOperationError(this.getNode(), 'Could not resolve the n8n webhook URL');
 				}
 
+				// Hookdeck delivers over the public internet, so an n8n it cannot reach
+				// needs the other delivery route: a CLI destination, fed by
+				// `hookdeck listen` running alongside n8n. That covers a laptop and an
+				// instance behind NAT alike — this is about reachability, not about
+				// whether the workflow is a development one.
 				const unreachable = describeUnreachableWebhookUrl(webhookUrl);
-				if (unreachable) {
-					throw new NodeOperationError(
-						this.getNode(),
-						`Hookdeck cannot deliver to this n8n instance. ${unreachable}`,
-						{
-							description:
-								'Give n8n a publicly reachable address and set the WEBHOOK_URL environment variable to it, then activate again. For local development, expose n8n through a tunnel and point WEBHOOK_URL at the tunnel URL.',
-						},
-					);
-				}
+				const viaCli = unreachable !== undefined;
 
 				const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
 				// extractValue collapses either resource locator mode to the source name.
@@ -325,14 +361,19 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 					};
 				}
 
+				const destination = buildDestination(webhookUrl, signingSecret, options, viaCli);
+				const connectionName = buildResourceName('n8n', workflowId, nodeId, isTest);
+
 				const body: IDataObject = {
-					name: buildResourceName('n8n', workflowId, nodeId, isTest),
+					name: connectionName,
 					...sourceBinding,
 					destination: {
 						name: buildResourceName('n8n-dest', workflowId, nodeId, isTest),
-						type: 'HTTP',
-						config: buildDestinationConfig(webhookUrl, signingSecret, options),
+						type: destination.type,
+						config: destination.config,
 					},
+					// Retries matter more on the CLI route, where they are the only thing
+					// that recovers an event delivered while `hookdeck listen` was down.
 					rules: buildRules(options),
 				};
 
@@ -350,6 +391,27 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				registration.sourceUrl = source?.url as string;
 				registration.signingSecret = signingSecret;
 				registration.destinationUrl = webhookUrl;
+
+				if (viaCli) {
+					// The node cannot start the CLI — n8n forbids community nodes from
+					// spawning processes — so the most it can do is say exactly what to
+					// run. `activationMessage` is a static string on the description and
+					// cannot carry these values, which leaves the log.
+					this.logger.info(
+						describeCliSetup.call(this, webhookUrl, sourceName, connectionName, unreachable),
+					);
+
+					const unsupported = optionsUnsupportedOverCli(options);
+					if (unsupported.length > 0) {
+						this.logger.info(
+							`Hookdeck Event Gateway Trigger: ${unsupported.join(' and ')} ${
+								unsupported.length > 1 ? 'are' : 'is'
+							} not applied. Hookdeck supports ${
+								unsupported.length > 1 ? 'them' : 'it'
+							} on directly reachable destinations only, and this workflow receives events through the Hookdeck CLI.`,
+						);
+					}
+				}
 
 				return true;
 			},

@@ -47,6 +47,48 @@ export function isTestWebhookUrl(url: string): boolean {
 }
 
 /**
+ * The port a local n8n is listening on, for the `hookdeck listen` command.
+ *
+ * A URL with no explicit port is almost certainly behind a proxy on 80 or 443,
+ * in which case the CLI needs the port n8n itself serves — 5678 by default.
+ */
+export function localPortFor(webhookUrl: string): string {
+	try {
+		return new URL(webhookUrl).port || '5678';
+	} catch {
+		return '5678';
+	}
+}
+
+/** The path Hookdeck should deliver to, which is what the CLI forwards onto. */
+export function webhookPathFor(webhookUrl: string): string {
+	try {
+		return new URL(webhookUrl).pathname;
+	} catch {
+		return '/';
+	}
+}
+
+/**
+ * A CLI device name identifying this n8n instance.
+ *
+ * Hookdeck keys a CLI client on its device name, and groups sessions by that
+ * client plus the connections it listens on. Two n8n instances that both
+ * defaulted to the machine hostname would look like one listener restarting,
+ * and could take each other's place. The instance ID keeps them apart; the host
+ * keeps the name recognisable in the Hookdeck dashboard.
+ */
+export function buildDeviceName(webhookUrl: string, instanceId: string): string {
+	let host = 'n8n';
+	try {
+		host = new URL(webhookUrl).hostname || 'n8n';
+	} catch {
+		// Fall through to the default; a device name is never worth failing over.
+	}
+	return sanitizeName(`n8n-${host}-${instanceId.slice(0, 8)}`).slice(0, 100);
+}
+
+/**
  * Reasons Hookdeck could not deliver to a given n8n URL, or undefined if it can.
  *
  * Hookdeck delivers over the public internet, so it rejects any destination it

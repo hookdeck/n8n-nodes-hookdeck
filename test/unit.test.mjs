@@ -22,19 +22,23 @@ import {
 	verifySignature,
 } from '../dist/nodes/Hookdeck/Delivery.js';
 import {
-	buildDestinationConfig,
+	buildDestination,
 	buildRules,
 	buildSourceConfig,
+	optionsUnsupportedOverCli,
 } from '../dist/nodes/Hookdeck/ConnectionPayload.js';
 import {
 	hookdeckApiRequest,
 	hookdeckApiRequestAllItems,
 } from '../dist/nodes/Hookdeck/GenericFunctions.js';
 import {
+	buildDeviceName,
 	buildResourceName,
 	describeUnreachableWebhookUrl,
 	isTestWebhookUrl,
+	localPortFor,
 	sanitizeName,
+	webhookPathFor,
 } from '../dist/nodes/Hookdeck/Naming.js';
 import { HookdeckEventGateway } from '../dist/nodes/Hookdeck/HookdeckEventGateway.node.js';
 import { HookdeckEventGatewayTrigger } from '../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js';
@@ -558,7 +562,8 @@ function fakeHookContext({ webhookUrl, staticData, params = {}, mode = 'trigger'
 		getWorkflow: () => ({ id: 'wf1' }),
 		getNode: () => ({ id: 'node1', name: 'Hookdeck Trigger', type: 'hookdeckEventGatewayTrigger' }),
 		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),
-		logger: { debug() {}, warn() {}, error() {} },
+		getInstanceId: () => 'inst12345678abcdef',
+		logger: { debug() {}, warn() {}, error() {}, info() {} },
 		helpers: {
 			httpRequestWithAuthentication(_cred, options) {
 				calls.push({ method: options.method, url: options.url });
@@ -809,6 +814,100 @@ test('provisioned destination disables path forwarding and signs deliveries', as
 	const retry = upsert.body.rules.find((r) => r.type === 'retry');
 	assert.deepEqual(retry.response_status_codes, ['500-599', '429']);
 	assert.ok(upsert.body.rules.some((r) => r.type === 'deduplicate'));
+});
+
+test('an unreachable n8n gets a CLI destination rather than a failed activation', async () => {
+	// Previously this threw. Hookdeck cannot reach localhost, but `hookdeck listen`
+	// can carry events to it, so the connection is provisioned against a CLI
+	// destination instead of refusing to activate at all.
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData,
+		params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+
+	await provision(ctx, 'web_PROD', []);
+
+	const destination = upsertOf(ctx).body.destination;
+	assert.equal(destination.type, 'CLI');
+	assert.equal(destination.config.path, '/webhook/abc/webhook');
+	assert.equal(destination.config.url, undefined);
+	// Same signing secret handling as the HTTP route, so webhook() is unchanged.
+	assert.equal(destination.config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.equal(staticData.production.signingSecret.length, 64);
+});
+
+test('a reachable n8n still gets an HTTP destination', async () => {
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc/webhook',
+		staticData,
+		params: { source: 'public-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+
+	await provision(ctx, 'web_PROD', []);
+
+	const destination = upsertOf(ctx).body.destination;
+	assert.equal(destination.type, 'HTTP');
+	assert.equal(destination.config.url, 'https://n8n.example.com/webhook/abc/webhook');
+	assert.equal(destination.config.path, undefined);
+});
+
+test('the CLI route logs the exact commands to run', async () => {
+	// The node cannot start the CLI, so the command is the whole deliverable.
+	// A wrong port or a missing project would look like the node is broken.
+	const logs = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData: {},
+		params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+	ctx.logger.info = (message) => logs.push(message);
+
+	await provision(ctx, 'web_PROD', []);
+
+	const setup = logs.join('\n');
+	assert.match(setup, /hookdeck ci --api-key/);
+	assert.match(setup, /hookdeck listen 5678 local-src n8n-wf1-node1 --device-name n8n-localhost-inst1234/);
+	// Say that events are not held indefinitely, since that is the real caveat.
+	assert.match(setup, /not queued indefinitely/);
+});
+
+test('rate limiting set against a CLI route is reported as not applied', async () => {
+	const logs = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData: {},
+		params: {
+			source: 'local-src',
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			options: { rateLimit: 10, deliveryGroupKey: 'body.id' },
+		},
+	});
+	ctx.logger.info = (message) => logs.push(message);
+
+	await provision(ctx, 'web_PROD', []);
+
+	const reported = logs.find((l) => l.includes('Delivery Rate Limit'));
+	assert.ok(reported, 'expected the unsupported options to be named');
+	assert.match(reported, /Delivery Rate Limit and Delivery Group Key are not applied/);
+});
+
+test('CLI setup helpers read the port, path and a distinct device name', () => {
+	assert.equal(localPortFor('http://localhost:5678/webhook/abc'), '5678');
+	// No explicit port means a proxy on 80/443, so fall back to what n8n serves.
+	assert.equal(localPortFor('https://n8n.example.com/webhook/abc'), '5678');
+	assert.equal(webhookPathFor('http://localhost:5678/webhook/abc/webhook'), '/webhook/abc/webhook');
+
+	// Two instances on the same host must not look like one listener restarting,
+	// or Hookdeck's session dedup would let them take each other's place.
+	const a = buildDeviceName('http://localhost:5678/webhook/x', 'aaaaaaaabbbb');
+	const b = buildDeviceName('http://localhost:5678/webhook/x', 'ccccccccdddd');
+	assert.notEqual(a, b);
+	assert.match(a, /^n8n-localhost-aaaaaaaa$/);
+	assert.match(buildDeviceName('https://n8n.example.com/webhook/x', 'zzzzzzzz'), /^n8n-n8n-example-com-zzzzzzzz$/);
 });
 
 test('registrationFor identifies a slot by the URL it was provisioned with', () => {
@@ -1278,25 +1377,69 @@ test('buildRules honours explicit options, including turning rules off', () => {
 	assert.equal(retry.interval, 5000);
 });
 
-test('buildDestinationConfig disables path forwarding and signs deliveries', () => {
-	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 'sekret', {});
+test('an HTTP destination disables path forwarding and signs deliveries', () => {
+	const { type, config } = buildDestination('https://n8n.example.com/webhook/abc', 'sekret', {}, false);
+	assert.equal(type, 'HTTP');
+	assert.equal(config.url, 'https://n8n.example.com/webhook/abc');
 	assert.equal(config.path_forwarding_disabled, true);
 	assert.equal(config.auth_type, 'CUSTOM_SIGNATURE');
 	assert.deepEqual(config.auth, { key: SIGNATURE_HEADER, signing_secret: 'sekret' });
 });
 
-test('buildDestinationConfig maps rate limiting and delivery groups', () => {
-	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 's', {
+test('an HTTP destination maps rate limiting and delivery groups', () => {
+	const { config } = buildDestination('https://n8n.example.com/webhook/abc', 's', {
 		rateLimit: 10,
 		rateLimitPeriod: 'concurrent',
 		deliveryGroupKey: 'body.customer_id',
-	});
+	}, false);
 	assert.equal(config.rate_limit, 10);
 	assert.equal(config.rate_limit_period, 'concurrent');
 	// delivery_groups is a single object, not an array, and cannot use 'concurrent'.
 	assert.equal(Array.isArray(config.delivery_groups), false);
 	assert.equal(config.delivery_groups.key, 'body.customer_id');
 	assert.notEqual(config.delivery_groups.rate_limit_period, 'concurrent');
+});
+
+test('a CLI destination carries only the path, and the same signature', () => {
+	// The signature is the point: a CLI destination accepts CUSTOM_SIGNATURE
+	// exactly as an HTTP one does, so nothing in webhook() has to know which
+	// route an event arrived by.
+	const { type, config } = buildDestination(
+		'http://localhost:5678/webhook/abc/webhook',
+		'sekret',
+		{},
+		true,
+	);
+	assert.equal(type, 'CLI');
+	assert.equal(config.path, '/webhook/abc/webhook');
+	assert.equal(config.url, undefined);
+	assert.equal(config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.deepEqual(config.auth, { key: SIGNATURE_HEADER, signing_secret: 'sekret' });
+});
+
+test('a CLI destination never carries rate limiting Hookdeck would reject', () => {
+	// CLI destinations have CUSTOM_CLI_PATH and nothing else — no
+	// MAX_DELIVERY_RATE, no delivery_groups.
+	const { config } = buildDestination('http://localhost:5678/webhook/abc', 's', {
+		rateLimit: 10,
+		rateLimitPeriod: 'concurrent',
+		deliveryGroupKey: 'body.customer_id',
+		deliveryGroupRateLimit: 2,
+	}, true);
+	assert.equal(config.rate_limit, undefined);
+	assert.equal(config.rate_limit_period, undefined);
+	assert.equal(config.delivery_groups, undefined);
+});
+
+test('options that cannot apply over the CLI are named, not silently dropped', () => {
+	assert.deepEqual(optionsUnsupportedOverCli({}), []);
+	assert.deepEqual(optionsUnsupportedOverCli({ rateLimit: 5 }), ['Delivery Rate Limit']);
+	assert.deepEqual(
+		optionsUnsupportedOverCli({ rateLimit: 5, deliveryGroupKey: 'body.id' }),
+		['Delivery Rate Limit', 'Delivery Group Key'],
+	);
+	// Options an HTTP destination also ignores are not this function's business.
+	assert.deepEqual(optionsUnsupportedOverCli({ retryCount: 3, headerPrefix: 'x-hd' }), []);
 });
 
 // ─── Action node routing ──────────────────────────────────────────────────────
