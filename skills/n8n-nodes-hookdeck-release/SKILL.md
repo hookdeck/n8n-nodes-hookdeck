@@ -73,27 +73,22 @@ stays at whatever it was — do not "fix" it in a follow-up commit.
 Two things, easily conflated:
 
 - **Provenance** — the signed attestation tying the package to this repo,
-  workflow and commit. Needs `id-token: write`. Works with either auth method.
-  **This is what n8n requires.**
+  workflow and commit. Needs `id-token: write`. **This is what n8n requires.**
 - **Trusted publishing** — publishing with a short-lived OIDC token instead of a
-  long-lived npm token. Not required by n8n.
+  long-lived npm token. Not required by n8n, and how this package publishes.
 
-Trusted publishers are configured on an **existing** package's settings page, so
-a package that has never been published cannot use OIDC for its first publish.
-That was resolved once, by claiming the name with a throwaway `0.0.1` published
-by hand and immediately deprecating it — see README § Releasing, "Bootstrapping
-the package". It is not something a release needs to repeat.
+The workflow contains no token handling. npm >= 11.5.1 finds the trusted
+publisher itself and exchanges the Actions OIDC token during publish, so there
+is nothing to inject.
 
-Releases use OIDC, and the workflow contains no token handling at all. npm
->= 11.5.1 finds the trusted publisher itself and exchanges the Actions OIDC
-token during publish — there is nothing to inject and no `NPM_TOKEN` step to
-maintain.
+**Never add an `NPM_TOKEN` secret.** It is not a fallback: any credential in
+`.npmrc` takes precedence over OIDC, so a stale or empty secret becomes the
+publishing identity, or fails the publish.
 
-There should be **no `NPM_TOKEN` secret** on the repository. Adding one does not
-give you a fallback, it gives you a silent takeover: any credential in `.npmrc`
-takes precedence over OIDC, so a stale or empty secret becomes the publishing
-identity, or fails the publish. If OIDC genuinely breaks, add the step back
-deliberately as part of diagnosing it.
+The trusted publisher is already configured (owner `hookdeck`, repo
+`n8n-nodes-hookdeck`, workflow `publish.yml`, environment blank). Leave the
+environment blank — `publish.yml` declares no `environment:`, and npm matches
+the OIDC claim exactly.
 
 Publishing by hand is blocked: `prepublishOnly` runs `n8n-node prerelease`,
 which exits unless `RELEASE_MODE` is set. Do not set it to work around a failing
@@ -148,14 +143,9 @@ credential class or a property is a candidate break. Read it, do not skim it.
    Do not release on `FAILURE`, or on `PENDING` for required checks. The states
    are uppercase.
 
-   **Do not use `gh api .../commits/${SHA}/status`.** It reads legacy commit
-   statuses, which GitHub Actions does not write — it writes check runs. This
-   repository has none, so that call returns `pending` with `total_count: 0`
-   however green CI is, and a gate built on it blocks every release. The rollup
-   above folds check runs and legacy statuses together, so it stays correct if a
-   status-writing integration is ever added.
-   ([hookdeck/hookdeck-cli#336](https://github.com/hookdeck/hookdeck-cli/issues/336),
-   where this check was inherited from.)
+   Use the rollup, not `gh api .../commits/${SHA}/status`. That endpoint reads
+   legacy commit statuses, which GitHub Actions does not write, so it returns
+   `pending` however green CI is.
 3. Create the release targeting `main` (see **Publish with `gh`**).
 
 ## Pre-release (beta)
