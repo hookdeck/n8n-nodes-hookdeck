@@ -419,6 +419,11 @@ observed running them.
 | Request | Get, Get Many, Retry |
 | Source | Create, Get, Get Many, Get URL |
 
+**Source → Create** is safe to re-run. Source names are unique within a project,
+so creating one twice would fail; if a source of that name already exists it is
+returned unchanged rather than overwritten. It never rewrites an existing
+source's type or verification, for the same reason the trigger does not.
+
 **Get Many** supports **Return All**, which walks Hookdeck's pagination, or a
 **Limit**.
 

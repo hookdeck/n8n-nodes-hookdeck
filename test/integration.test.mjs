@@ -296,4 +296,12 @@ test('Source Create returns the public URL the provider needs', { skip }, async 
 	assert.equal(created.name, sourceName);
 	assert.equal(created.type, 'STRIPE');
 	assert.match(created.url, /^https:\/\/hkdk\.events\//);
+
+	// Source names are unique per project, so POST answers 409 the second time.
+	// Running the operation again must adopt the existing source, not fail, and
+	// must not rewrite it the way an upsert would.
+	const again = await new HookdeckEventGateway().execute.call(ctx);
+	assert.equal(again[0][0].json.id, created.id, 're-running created a different source');
+	assert.equal(again[0][0].json.type, 'STRIPE');
+	assert.equal(again[0][0].json.url, created.url);
 });

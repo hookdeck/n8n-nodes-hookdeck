@@ -187,6 +187,16 @@ async function executeOperation(
 				});
 			}
 
+			// Adopt rather than fail or overwrite. Source names are unique within a
+			// project, so a plain create is not safe to re-run: POST /sources answers
+			// 409 the second time, which breaks any workflow that runs more than
+			// once. PUT would be idempotent but upserts — it rewrites an existing
+			// source's type and verification config, which is the exact damage the
+			// trigger was changed to stop doing. Returning the existing source
+			// unchanged is idempotent and destroys nothing.
+			const existing = await hookdeckApiRequestAllItems.call(this, basePath, { name }, 1);
+			if (existing.length > 0) return [existing[0]];
+
 			const body: IDataObject = { name, type: this.getNodeParameter('sourceType', i) as string };
 
 			const raw = this.getNodeParameter('sourceConfigJson', i, '') as string | IDataObject;

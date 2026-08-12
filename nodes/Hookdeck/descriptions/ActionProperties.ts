@@ -318,7 +318,8 @@ export const sourceProperties: INodeProperties[] = [
 			{
 				name: 'Create',
 				value: 'create',
-				description: 'Create a source and return its public URL',
+				description:
+					'Create a source and return its public URL. Safe to re-run: if a source of that name already exists it is returned unchanged, never overwritten.',
 				action: 'Create a source',
 			},
 			{ name: 'Get', value: 'get', description: 'Retrieve a source', action: 'Get a source' },

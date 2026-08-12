@@ -151,7 +151,12 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		// n8n's default here is "Go to <node> and create an event", which describes
 		// something the Event Gateway does not have: there is no create-an-event
 		// button, you send a request to the source URL and Hookdeck delivers it.
-		eventTriggerDescription: 'Send a request to your Hookdeck source URL',
+		// This replaces n8n's "Go to <node> and create an event", which describes
+		// something the Event Gateway does not have. It is also the only text shown
+		// while the editor waits for a test event — the one moment a local n8n needs
+		// the CLI running — so it says so.
+		eventTriggerDescription:
+			'Send a request to your Hookdeck source URL. If this n8n is not reachable from the internet, events arrive through the Hookdeck CLI: run the hookdeck listen command from the workflow log first, or nothing will be delivered.',
 		activationMessage:
 			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, the workflow log has the hookdeck listen command needed to receive events.',
 		defaults: {
