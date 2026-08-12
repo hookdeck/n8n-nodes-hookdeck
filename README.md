@@ -412,6 +412,16 @@ delivery metadata only a gateway can supply. See
 [`examples/README.md`](examples/README.md) for how each behaves and what was
 observed running them.
 
+![The dead-letter example running: a Stripe payment_intent.succeeded event
+arriving through Hookdeck, taking the false branch of "Final attempt?" to
+Process order, with the trigger's output showing body, headers, query and the
+hookdeck metadata](docs/images/dead-letter-workflow.png)
+
+The `hookdeck` column is the part n8n's own Webhook node cannot give you:
+`isLastAttempt` is what the IF branches on, `idempotencyKey` is what the other
+example deduplicates on, and `eventUrl` links straight to that delivery in the
+Hookdeck dashboard.
+
 ### Hookdeck Event Gateway node
 
 | Resource | Operations |

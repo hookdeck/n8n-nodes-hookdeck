@@ -54,5 +54,10 @@ so the first attempt is also the last, the same event arrived with
 **Trying it.** Setting **Options → Retry Count** to `0` is the quickest way to
 see the dead-letter branch fire without waiting out a full retry schedule.
 
+![The workflow after a Stripe payment_intent.succeeded event arrived through
+Hookdeck: the trigger and IF both succeeded, the false branch ran Process order,
+and the output pane shows body, headers, query and hookdeck
+columns](../docs/images/dead-letter-workflow.png)
+
 Replace the `Dead letter` and `Process order` placeholders with whatever the
 workflow should actually do — a Slack message and a database write, typically.

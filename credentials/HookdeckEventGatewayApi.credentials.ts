@@ -10,7 +10,10 @@ export class HookdeckEventGatewayApi implements ICredentialType {
 
 	displayName = 'Hookdeck Event Gateway API';
 
-	documentationUrl = 'https://hookdeck.com/docs/api';
+	// The node's own docs, not Hookdeck's API reference. Nothing on
+	// hookdeck.com currently mentions n8n, so a link there answers none of the
+	// questions someone has while filling in this credential.
+	documentationUrl = 'https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#credentials';
 
 	icon = 'file:../nodes/Hookdeck/hookdeck.svg' as const;
 
