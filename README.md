@@ -284,7 +284,9 @@ other hosts. Two parts of it work differently here, because n8n requires it:
 - **No host-side admission control.** The contract answers `503` with
   `Retry-After` when a concurrency cap is reached. n8n governs its own execution
   concurrency, so the equivalent lever here is the **Delivery Rate Limit**
-  option, which caps delivery inside Hookdeck before n8n is reached.
+  option, which caps delivery inside Hookdeck before n8n is reached — on a
+  directly reachable n8n. Instances receiving events through the Hookdeck CLI
+  have no equivalent, because a CLI destination does not support rate limiting.
 
 Destination authentication also uses `CUSTOM_SIGNATURE` rather than
 `HOOKDECK_SIGNATURE`. Hookdeck's project signing secret is not exposed through
@@ -294,41 +296,28 @@ the algorithm is identical (HMAC-SHA256 over the raw body, base64).
 
 #### Finding the source URL
 
-This is the address you give your provider, and it exists once the source has
-been created — that is, after the workflow has been published once.
+This is the address you give your provider. It is `https://hkdk.events/<source id>`,
+and Hookdeck generates that ID when the source is created, so it cannot be
+predicted from the name and does not exist until the source does.
 
-The URL is `https://hkdk.events/<source id>`, and Hookdeck generates that ID — so
-it cannot exist until the source does, and it cannot be predicted from the name.
+1. **Source → By Name**, type a name.
+2. **Activate the workflow.** The node creates the source.
+3. **Source → From List.** Each source is listed as `name — https://hkdk.events/...`.
+4. Give that URL to Stripe, GitHub, or whatever is sending the events.
 
-**Recommended: [create the source in Hookdeck](https://dashboard.hookdeck.com/sources/new)
-first** and copy its URL there. Then pick it in the node's **Source** field,
-click **Test this trigger**, send an event, and publish. One pass.
+There is no need to know the URL before activating. Nothing can arrive until
+your provider has been pointed at it, so activating first costs nothing.
 
-**Creating it from n8n instead** takes two passes, because n8n locks the
-parameters panel while a trigger is listening:
+If the source already exists in Hookdeck, skip to step 3 — pick it from the
+list, and the node leaves its Source Type and Verification alone.
 
-1. **Source → By Name**, enter a new name.
-2. **Test this trigger** (in the Output panel on the right). This creates the
-   source and starts listening.
-3. **Stop Listening** — the panel is read-only until you do.
-4. Switch to **From List** and *re-pick* the source. Switching mode alone leaves
-   the old value with no URL attached.
-5. **Test this trigger** again, send your event, then **Publish**.
-
-Stopping the test listener deletes its connection but leaves the source, so the
-URL stays valid for the published workflow.
-
-Each source is listed with its `https://hkdk.events/...` URL, so you can confirm
-the right one. The field is narrow, though, and n8n has no copy control for a
-node parameter — so to get the URL onto your clipboard, use one of:
-
-- **The link beside the field.** It opens that source in the Hookdeck dashboard,
-  which has a copy button. (It deliberately does *not* open the source URL
-  itself — that endpoint rejects browser `GET` requests with `405`, and pointing
-  a link at your own ingest endpoint invites firing requests at it by accident.)
-- **The Hookdeck Event Gateway node, Source → Get URL.** This returns the URL as workflow
-  data, where n8n's output panel gives you copy-on-hover. Best if you want the
-  URL properly copy-pasteable inside n8n, or want to use it in an expression.
+To get the URL onto your clipboard, either use the link beside the field, which
+opens that source in the Hookdeck dashboard where there is a copy button, or run
+the **Hookdeck Event Gateway** node with **Source → Get URL**, which returns it
+as workflow data with copy-on-hover. (The link deliberately does not point at
+the source URL itself: that endpoint rejects browser `GET` requests with `405`,
+and aiming a link at your own ingest endpoint invites firing requests at it by
+accident.)
 
 n8n's own webhook URL is hidden on this node on purpose. It is an internal
 address: sending a provider there bypasses Hookdeck and silently loses the

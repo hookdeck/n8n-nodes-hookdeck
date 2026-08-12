@@ -13,7 +13,7 @@ import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
 export const triggerProperties: INodeProperties[] = [
 		{
 			displayName:
-				'Quickest setup: <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create the source in Hookdeck</a>, copy its URL for your provider, then pick it below. Otherwise name a new source below and click "Test this trigger" (Output panel, right) to create it — then Stop Listening, switch Source to "From list" and re-pick it to see the URL.',
+				'Name a source below and activate the workflow — the node creates it in Hookdeck. Then set Source to "From list" to see its public URL, which is the address to give Stripe, GitHub, or whatever sends your events. Already have a source? Pick it from the list; the node leaves its settings as they are.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
@@ -63,7 +63,7 @@ export const triggerProperties: INodeProperties[] = [
 					name: 'name',
 					type: 'string',
 					placeholder: 'stripe-production',
-					hint: 'Reused if it exists, otherwise created. Switch to "From list" and re-select it to see its URL.',
+					hint: 'Created when the workflow is activated, or reused if it already exists. Switch to "From list" afterwards to see its URL.',
 					// A name alone cannot build the source URL — that is keyed on the
 					// ID Hookdeck generates. Linking to the sources list at least gives
 					// this mode a route to the URL, since otherwise it has none at all.
