@@ -590,6 +590,12 @@ npm provenance statement, so the publish has to happen in CI.
 
    Or use the GitHub UI — Releases → Draft a new release.
 
+The first release needs an `NPM_TOKEN` repository secret, because npm's trusted
+publishers are configured on a package that already exists. After that, add the
+trusted publisher on npmjs.com and delete the secret — the workflow then uses
+OIDC. Either way the package is published with provenance, which is what n8n
+requires.
+
 Publishing then happens automatically:
 [`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
 version from it, re-runs lint, the verification scan, the build, the load check

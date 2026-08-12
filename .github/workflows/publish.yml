@@ -18,23 +18,37 @@
 # the notes and the artifact are decided in one place, and a draft release can be
 # prepared and reviewed before anything reaches npm.
 #
-# ─── ONE-TIME SETUP ────────────────────────────────────────────────────────────
+# ─── PROVENANCE IS NOT TRUSTED PUBLISHING ──────────────────────────────────────
 #
-# Option A — OIDC Trusted Publishing (recommended, no long-lived secrets):
-#   1. On npmjs.com open the package settings → "Publish access" → "Trusted
-#      Publishers" → "Add a publisher".
-#   2. Select GitHub Actions and fill in:
-#        Repository owner: hookdeck
-#        Repository name:  n8n-nodes-hookdeck
-#        Workflow name:    publish.yml
-#        Environment:      (leave blank)
-#   3. Leave NPM_TOKEN unset. GitHub's OIDC token is used instead.
+# Two separate things, easily conflated:
 #
-# Option B — npm Automation Token (fallback):
-#   Set an NPM_TOKEN repository secret with a granular token scoped to this
-#   package with read and write publish permission.
+#   Provenance         the signed attestation linking the package to this repo,
+#                      workflow and commit. Needs `id-token: write` and a
+#                      supported CI. Works with either auth method below.
+#                      This is what n8n requires.
 #
-# Provenance is signed by GitHub either way.
+#   Trusted publishing publishing with a short-lived OIDC token instead of a
+#                      long-lived npm token. Nice to have; not required by n8n.
+#
+# ─── SETUP ─────────────────────────────────────────────────────────────────────
+#
+# Trusted publishers are configured on an *existing* package's settings page, so
+# a package that has never been published cannot use OIDC for its first release.
+#
+#   First release:  set an NPM_TOKEN repository secret — a granular token scoped
+#                   to @hookdeck with read and write access. Provenance still
+#                   applies, so this satisfies n8n.
+#
+#   After that:     on npmjs.com open the package → Settings → "Trusted
+#                   Publishers" → "Add a publisher" → GitHub Actions, with
+#                   owner `hookdeck`, repository `n8n-nodes-hookdeck`, workflow
+#                   `publish.yml`, environment blank. Then delete the NPM_TOKEN
+#                   secret: the step below is skipped when it is absent and npm
+#                   falls back to OIDC on its own.
+#
+# OIDC needs npm >= 11.5.1 on Node >= 22.14, which `lts/*` satisfies. The guard
+# below fails loudly rather than silently falling back if that ever stops being
+# true.
 name: Publish
 
 on:
@@ -59,12 +73,15 @@ jobs:
           # released, even if main has moved on since.
           ref: ${{ github.event.release.tag_name }}
 
+      # `registry-url` is deliberately not set. It makes setup-node write
+      # `_authToken=${NODE_AUTH_TOKEN}` into .npmrc, and with no token that is an
+      # empty credential — which npm prefers over OIDC, so trusted publishing
+      # silently fails to engage. The default registry is npmjs anyway.
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 'lts/*'
           cache: 'npm'
-          registry-url: 'https://registry.npmjs.org'
 
       - name: Install dependencies
         run: 'npm ci'
@@ -101,8 +118,16 @@ jobs:
             echo "tag=latest" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check npm supports trusted publishing
+        run: |
+          npx --yes semver -r '>=11.5.1' "$(npm -v)" >/dev/null \
+            || { echo "npm $(npm -v) is too old for OIDC publishing (needs >=11.5.1)"; exit 1; }
+
+      # Skipped entirely when the secret is absent, which leaves npm to use OIDC.
+      # Setting an empty token would take precedence over OIDC and fail.
+      - name: Authenticate with a token, if one is configured
+        if: ${{ secrets.NPM_TOKEN != '' }}
+        run: npm config set //registry.npmjs.org/:_authToken "${{ secrets.NPM_TOKEN }}"
+
       - name: Publish
         run: npm publish --provenance --access public --tag "${{ steps.disttag.outputs.tag }}"
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: 'true'

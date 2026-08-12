@@ -68,6 +68,26 @@ last stable version.
 There is no release commit. The tag is the version, so `package.json` in git
 stays at whatever it was — do not "fix" it in a follow-up commit.
 
+## Auth: provenance is not trusted publishing
+
+Two things, easily conflated:
+
+- **Provenance** — the signed attestation tying the package to this repo,
+  workflow and commit. Needs `id-token: write`. Works with either auth method.
+  **This is what n8n requires.**
+- **Trusted publishing** — publishing with a short-lived OIDC token instead of a
+  long-lived npm token. Not required by n8n.
+
+Trusted publishers are configured on an **existing** package's settings page, so
+a package that has never been published cannot use OIDC for its first release.
+The first release needs an `NPM_TOKEN` secret; provenance still applies, so it
+still satisfies n8n. After that, add the trusted publisher on npmjs.com and
+delete the secret — the workflow's auth step is skipped when it is absent and npm
+falls back to OIDC.
+
+Do not leave an empty `NPM_TOKEN` secret in place. An empty credential takes
+precedence over OIDC and the publish fails.
+
 ## What breaks an n8n node
 
 SemVer here is about **the contract with a saved workflow**, not just the API
