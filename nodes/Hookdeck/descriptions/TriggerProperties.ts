@@ -12,21 +12,17 @@ import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
  */
 export const triggerProperties: INodeProperties[] = [
 		{
+			// One notice, deliberately. Two stacked blocks pushed the first field
+			// below the fold, and n8n's own nodes keep these to a line or two.
+			//
+			// It carries the CLI note because the node view's "Listening for test
+			// event" panel cannot be customised — it switches on node name and falls
+			// back to "Go to <node> and create an event" for everything that is not
+			// the built-in chat or form trigger. This notice sits beside that panel,
+			// so it is the only place a local n8n can be told why nothing arrives.
 			displayName:
-				'Name a source below and publish the workflow — the node creates it in Hookdeck. Then set Source to "From list" to see its public URL, which is the address to give Stripe, GitHub, or whatever sends your events. Already have a source, or want to create one now? <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">Create it in Hookdeck</a>, then pick it from the list; the node leaves its settings as they are.',
+				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish. If Hookdeck cannot reach this n8n, events arrive through the Hookdeck CLI instead: run the hookdeck listen command from the workflow log, or nothing will be delivered.',
 			name: 'setupNotice',
-			type: 'notice',
-			default: '',
-		},
-		{
-			// n8n's "Listening for test event" panel cannot be customised — it
-			// switches on node name and falls back to "Go to <node> and create an
-			// event" for everything that is not the built-in chat or form trigger.
-			// This notice sits beside that panel, which makes it the only place a
-			// local n8n can be told why nothing is arriving.
-			displayName:
-				'<b>Testing on a local n8n?</b> Events reach it through the Hookdeck CLI, so <code>hookdeck listen</code> must be running. Clicking "Execute step" creates a second Hookdeck connection for the editor\'s test URL, which a CLI started earlier is not attached to — restart it the first time, or nothing will arrive. The workflow log has the exact command.',
-			name: 'localTestingNotice',
 			type: 'notice',
 			default: '',
 		},
