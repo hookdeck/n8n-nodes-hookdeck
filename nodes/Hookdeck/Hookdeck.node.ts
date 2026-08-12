@@ -163,6 +163,9 @@ async function executeOperation(
 				];
 			}
 
+			// Only ever from a `/count` endpoint. A list response also carries a
+			// `count`, but that is the size of the page just fetched, not a total —
+			// reading it here would answer "how many" with the page size.
 			const response = await hookdeckApiRequest.call(
 				this,
 				'GET',

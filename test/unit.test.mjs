@@ -1288,6 +1288,33 @@ test('a small event count is exact, not flagged as a floor', async () => {
 	assert.equal(output[0][0].json.isAtLeast, false);
 });
 
+test('an event count ignores the page-size count on a list response', async () => {
+	// The /events list response carries its own `count`, and it is the size of
+	// the page just fetched, not a total. Reading it would answer "how many" with
+	// the page size — the exact shape of the bug that had a sibling plugin report
+	// "1 open issue" when there were four.
+	const { output } = await runAction(
+		{ resource: 'event', operation: 'getCount', filters: {} },
+		{ count: 1, models: [{ id: 'evt_1' }, { id: 'evt_2' }, { id: 'evt_3' }], pagination: {} },
+	);
+
+	assert.equal(output[0][0].json.count, 3, 'must count the models, not echo the page count');
+	assert.equal(output[0][0].json.isAtLeast, false);
+});
+
+test('an exact count comes from the count endpoint, never a list', async () => {
+	// Guards the boundary in the other direction: a countable resource must hit
+	// /count, so it cannot silently fall back to a page size.
+	for (const resource of ['connection', 'destination', 'issue', 'source']) {
+		const { calls } = await runAction(
+			{ resource, operation: 'getCount', filters: {} },
+			{ count: 7 },
+		);
+		assert.equal(calls.length, 1, resource);
+		assert.match(calls[0].url, /\/count$/, resource);
+	}
+});
+
 test('action node rejects an unknown resource', async () => {
 	await assert.rejects(
 		() => runAction({ resource: 'nonsense', operation: 'get', id: 'x' }),
