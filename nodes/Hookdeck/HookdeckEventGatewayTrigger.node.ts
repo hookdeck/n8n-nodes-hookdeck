@@ -114,7 +114,6 @@ function describeCliSetup(
 	this: IHookFunctions,
 	webhookUrl: string,
 	sourceName: string,
-	connectionName: string,
 	reason: string | undefined,
 ): string {
 	const deviceName = buildDeviceName(webhookUrl, this.getInstanceId());
@@ -125,9 +124,11 @@ function describeCliSetup(
 		'Events will be delivered through the Hookdeck CLI. Run these alongside n8n:',
 		'',
 		'  hookdeck ci --api-key <your Event Gateway project API key>',
-		`  hookdeck listen ${port} ${sourceName} ${connectionName} --device-name ${deviceName}`,
+		`  hookdeck listen ${port} ${sourceName} --device-name ${deviceName}`,
 		'',
-		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against this connection at all, so there is nothing to retry afterwards.',
+		'The connection is deliberately not named in that command. Naming it would attach the CLI to this workflow\'s live connection only, and "Listen for test event" in the editor delivers over a second connection on the same source. Omitting it attaches to every connection the source has when the CLI starts — so restart the CLI after using "Listen for test event" for the first time.',
+		'',
+		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against that connection at all, so there is nothing to retry afterwards.',
 	].join('\n');
 }
 
@@ -406,7 +407,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 					// run. `activationMessage` is a static string on the description and
 					// cannot carry these values, which leaves the log.
 					this.logger.info(
-						describeCliSetup.call(this, webhookUrl, sourceName, connectionName, unreachable),
+						describeCliSetup.call(this, webhookUrl, sourceName, unreachable),
 					);
 
 					const unsupported = optionsUnsupportedOverCli(options);

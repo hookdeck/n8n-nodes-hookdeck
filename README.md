@@ -126,13 +126,26 @@ alongside n8n:
 
 ```bash
 hookdeck ci --api-key <your Event Gateway project API key>
-hookdeck listen 5678 <source> <connection> --device-name n8n-<host>-<instance>
+hookdeck listen 5678 <source> --device-name n8n-<host>-<instance>
 ```
 
 `hookdeck ci` matters: `hookdeck listen` otherwise uses whichever project the
 CLI was last logged into, and pointing it at the wrong one looks like the node
 is broken. `--device-name` keeps two n8n instances from being treated as one
 listener restarting.
+
+**No connection is named in that command, deliberately.** An n8n trigger has two
+webhook URLs — the live one used while the workflow is active, and a separate
+one used by **Listen for test event** in the editor. The node provisions a
+Hookdeck connection for each, both on the same source. Naming a connection
+attaches the CLI to that one alone, so a command naming the live connection
+would leave test events with no CLI session — and events for a connection with
+no session are not recorded at all. Naming only the source attaches to every
+connection the source has.
+
+The CLI picks up the connections that exist when it starts, so restart it after
+the first use of **Listen for test event**, which is when n8n creates the second
+connection.
 
 #### What the CLI route cannot do
 

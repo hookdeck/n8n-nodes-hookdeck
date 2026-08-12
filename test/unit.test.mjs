@@ -869,10 +869,13 @@ test('the CLI route logs the exact commands to run', async () => {
 
 	const setup = logs.join('\n');
 	assert.match(setup, /hookdeck ci --api-key/);
-	assert.match(setup, /hookdeck listen 5678 local-src n8n-wf1-node1 --device-name n8n-localhost-inst1234/);
+	// The connection is deliberately not named: naming it would cover only the
+	// live connection, and "Listen for test event" uses a second one.
+	assert.match(setup, /hookdeck listen 5678 local-src --device-name n8n-localhost-inst1234/);
+	assert.doesNotMatch(setup, /hookdeck listen 5678 local-src n8n-/);
 	// Say what actually happens when nothing is listening: no event is recorded
 	// against the connection at all, so there is nothing to retry later.
-	assert.match(setup, /not recorded against this connection/);
+	assert.match(setup, /not recorded against that connection/);
 });
 
 test('rate limiting set against a CLI route is reported as not applied', async () => {
