@@ -51,9 +51,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   running, and that clicking "Execute step" creates a second connection an
   already-running CLI is not attached to. Both notices sit directly above the
   Source field they describe.
-- Test connections on the CLI route are paused rather than deleted when the
+- Test connections on the CLI route are disabled rather than deleted when the
   listen window closes, so a running `hookdeck listen` stays attached across
-  test runs instead of needing a restart every time.
+  test runs instead of needing a restart every time. Disabled rather than
+  paused, because a paused connection holds events and would deliver the
+  backlog on the next test run.
 - A link to Hookdeck's create-a-source page beside the trigger's Source field,
   and in the setup notice.
 - Two importable example workflows in `examples/`, both run against a real n8n:

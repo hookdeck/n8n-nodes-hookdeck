@@ -1010,10 +1010,14 @@ test('platform auth covers inline, choice-of-scheme and no-secret types', () => 
 	assert.deepEqual(none, {});
 });
 
-test('a CLI test connection is paused, not deleted, so the listener stays attached', async () => {
+test('a CLI test connection is disabled, not deleted, so the listener stays attached', async () => {
 	// Deleting it would mean every "Execute step" creates a new connection that a
 	// running `hookdeck listen` is not attached to, so each test run would need
-	// the CLI restarted. Pausing keeps the connection and its ID.
+	// the CLI restarted. Disabling keeps the connection and its ID.
+	//
+	// Disabled rather than paused: a paused connection holds events, so every
+	// event arriving while the editor is not listening would be delivered as a
+	// backlog on the next run.
 	const staticData = {
 		production: { connectionId: 'web_PROD', signingSecret: 'p', viaCli: true },
 		test: { connectionId: 'web_TEST', signingSecret: 't', viaCli: true },
@@ -1028,10 +1032,14 @@ test('a CLI test connection is paused, not deleted, so the listener stays attach
 	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
 
 	assert.ok(
-		ctx.calls.some((c) => c.method === 'PUT' && c.url.endsWith('/connections/web_TEST/pause')),
-		`expected PAUSE of web_TEST, got ${JSON.stringify(ctx.calls)}`,
+		ctx.calls.some((c) => c.method === 'PUT' && c.url.endsWith('/connections/web_TEST/disable')),
+		`expected DISABLE of web_TEST, got ${JSON.stringify(ctx.calls)}`,
 	);
 	assert.ok(!ctx.calls.some((c) => c.method === 'DELETE'), 'must not delete a CLI test connection');
+	assert.ok(
+		!ctx.calls.some((c) => c.url.endsWith('/pause')),
+		'must not pause it either — a paused connection holds events',
+	);
 	// Static data is kept, so the next run finds and unpauses this same connection.
 	assert.equal(staticData.test.connectionId, 'web_TEST');
 });

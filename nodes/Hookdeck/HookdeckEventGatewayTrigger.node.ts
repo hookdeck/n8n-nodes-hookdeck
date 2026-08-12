@@ -462,27 +462,37 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				// connection points at a URL that stops answering after 120 seconds, so
 				// pausing it would leave a permanently broken connection behind.
 				//
-				// A test registration delivering over the CLI is paused instead. Deleting
-				// it means the next "Execute step" creates a new connection that a
-				// running `hookdeck listen` is not attached to, so every single test run
-				// would need the CLI restarted. Pausing keeps the connection — and its
-				// ID — so the CLI stays attached across runs, and `create` unpauses it.
-				// Hookdeck routes to paused CLI connections' sessions too: session
-				// eligibility includes paused webhooks by design.
+				// A test registration delivering over the CLI is disabled instead.
+				// Deleting it means the next "Execute step" creates a new connection
+				// that a running `hookdeck listen` is not attached to, so every test run
+				// would need the CLI restarted. Disabling keeps the connection, and its
+				// ID, so the CLI stays attached across runs — measured: after disabling
+				// and re-enabling, a still-running CLI delivered the next event.
+				//
+				// Disabled rather than paused because a paused connection *holds*
+				// events: with the CLI connected and the editor not listening, every
+				// event to the shared source was recorded against the test connection
+				// with status HOLD, and unpausing delivered the backlog. Disabled, no
+				// event is created for it at all. Leaving it enabled is worse still —
+				// each stray event would be delivered to a test path n8n no longer
+				// serves and burn the connection's retries on a 404.
+				//
+				// The connection upsert in `create` clears `disabled_at`, so the next
+				// test run re-enables it without a separate call.
 				const onDeactivate = isTest
 					? registration.viaCli
-						? 'pause'
+						? 'disable'
 						: 'delete'
 					: ((options.onDeactivate as string) ?? 'pause');
 
-				if (onDeactivate === 'pause') {
+				if (onDeactivate === 'pause' || onDeactivate === 'disable') {
 					await hookdeckApiRequest.call(
 						this,
 						'PUT',
-						`/connections/${registration.connectionId}/pause`,
+						`/connections/${registration.connectionId}/${onDeactivate}`,
 					);
-					// Static data is kept so the next activation finds and unpauses this
-					// same connection rather than provisioning a second one.
+					// Static data is kept so the next activation finds this same
+					// connection and re-enables it, rather than provisioning a second one.
 					return true;
 				}
 
