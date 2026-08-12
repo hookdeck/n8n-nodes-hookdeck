@@ -1,0 +1,85 @@
+{
+  "name": "Hookdeck \u2014 process each event once",
+  "nodes": [
+    {
+      "parameters": {
+        "ackMode": "async_retry",
+        "source": {
+          "__rl": true,
+          "mode": "name",
+          "value": "n8n-example-idempotency"
+        },
+        "sourceType": "WEBHOOK",
+        "verification": "none",
+        "options": {}
+      },
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "e3399c9b-d92b-4d40-90ba-78d393ba7fe7",
+      "name": "Hookdeck Event Gateway Trigger",
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "logic": "removeItemsWithAlreadySeenKeyValues",
+        "dedupeValue": "={{ $json.hookdeck.idempotencyKey }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "5400dc82-d52d-4889-bdde-e1ab3a0742c5",
+      "name": "Only if not seen before"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        0
+      ],
+      "id": "989b6017-66ac-4960-8d52-fbe05dbef878",
+      "name": "Process order"
+    }
+  ],
+  "connections": {
+    "Hookdeck Event Gateway Trigger": {
+      "main": [
+        [
+          {
+            "node": "Only if not seen before",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Only if not seen before": {
+      "main": [
+        [
+          {
+            "node": "Process order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

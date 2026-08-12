@@ -43,6 +43,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
 
+- Two importable example workflows in `examples/`, both run against a real n8n:
+  an idempotency gate keyed on `hookdeck.idempotencyKey`, and a dead-letter
+  branch routed on `hookdeck.isLastAttempt`.
 - Delivery through the Hookdeck CLI when n8n is not reachable from the public
   internet. Activation used to fail with instructions to set up a tunnel; the
   node now provisions a `CLI` destination instead and logs the `hookdeck ci` and

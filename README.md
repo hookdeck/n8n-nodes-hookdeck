@@ -342,6 +342,21 @@ original sender wrote — "the signature passed, so the body is intact" does not
 follow. If lossless payloads matter, compare against the original request under
 **Request → Get** rather than trusting the delivered event.
 
+## Example workflows
+
+Two importable workflows are in [`examples/`](examples/), both built and run
+against a real n8n instance:
+
+| Workflow | Problem it solves |
+| --- | --- |
+| [`process-each-event-once.json`](examples/process-each-event-once.json) | A retried delivery runs the workflow twice. Gates on `hookdeck.idempotencyKey`, which is stable across retries of one event, so the second arrival stops before doing the work again. |
+| [`catch-events-on-final-attempt.json`](examples/catch-events-on-final-attempt.json) | An event that fails every retry disappears silently. Routes on `hookdeck.isLastAttempt` so the final attempt reaches a dead-letter branch. |
+
+Neither is possible with n8n's built-in Webhook node, because both depend on
+delivery metadata only a gateway can supply. See
+[`examples/README.md`](examples/README.md) for how each behaves and what was
+observed running them.
+
 ## Hookdeck Event Gateway node
 
 | Resource | Operations |

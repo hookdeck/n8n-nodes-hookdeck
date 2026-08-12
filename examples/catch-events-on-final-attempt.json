@@ -1,0 +1,121 @@
+{
+  "name": "Hookdeck \u2014 catch events on their final attempt",
+  "nodes": [
+    {
+      "parameters": {
+        "ackMode": "async_retry",
+        "source": {
+          "__rl": true,
+          "mode": "name",
+          "value": "n8n-example-dead-letter"
+        },
+        "sourceType": "WEBHOOK",
+        "verification": "none",
+        "options": {}
+      },
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ff2e28ec-e9bc-44c3-8e53-0ea1fe32a16b",
+      "name": "Hookdeck Event Gateway Trigger",
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "62b8653e-f62b-49be-8a3f-f4f09661761c",
+              "leftValue": "={{ $json.hookdeck.isLastAttempt }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        240,
+        0
+      ],
+      "id": "a7c3f08e-8423-4729-889b-a9aaef172baa",
+      "name": "Final attempt?"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        -100
+      ],
+      "id": "2acc7e6d-5ecd-40f8-a2a7-44c090250a2f",
+      "name": "Dead letter"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        480,
+        100
+      ],
+      "id": "b54e8ef6-3f13-4515-ade3-62ebc7839e1c",
+      "name": "Process order"
+    }
+  ],
+  "connections": {
+    "Hookdeck Event Gateway Trigger": {
+      "main": [
+        [
+          {
+            "node": "Final attempt?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final attempt?": {
+      "main": [
+        [
+          {
+            "node": "Dead letter",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process order",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
