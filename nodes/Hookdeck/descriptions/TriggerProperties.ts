@@ -21,7 +21,7 @@ export const triggerProperties: INodeProperties[] = [
 			// the built-in chat or form trigger. This notice sits beside that panel,
 			// so it is the only place a local n8n can be told why nothing arrives.
 displayName:
-				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish.<br><br>If Hookdeck cannot reach this n8n — running it locally, or behind NAT — events are delivered through the <a href="https://hookdeck.com/docs/cli" target="_blank">Hookdeck CLI</a> instead. Keep <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> running alongside n8n, or nothing will arrive.',
+				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish. If Hookdeck cannot reach this n8n — running it locally, or behind NAT — events are delivered through the <a href="https://hookdeck.com/docs/cli" target="_blank">Hookdeck CLI</a> instead. Keep <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> running alongside n8n, or nothing will arrive.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
