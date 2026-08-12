@@ -1,13 +1,44 @@
 # @hookdeck/n8n-nodes-hookdeck
 
-An n8n community node for the
-[Hookdeck Event Gateway](https://hookdeck.com/docs/introduction), which receives,
-queues and delivers webhooks and other asynchronous messages.
+n8n community nodes for [Hookdeck](https://hookdeck.com), the event gateway
+that receives, verifies, queues, and delivers webhooks, so your workflows
+don't have to care whether n8n was up when the event arrived.
+
+[n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
+workflow automation platform. Its built-in Webhook trigger hands your provider
+a URL that leads straight to your instance, which means a restart, a deploy,
+or a deactivated workflow loses events, a double-firing provider runs your
+workflow twice, and a failed execution has no event left to retry. This
+package puts Hookdeck in between, and makes its guarantees configurable from
+the node itself:
+
+- **No events lost to downtime.** Events are queued durably at Hookdeck.
+  Deactivating a workflow pauses delivery instead of dropping events;
+  reactivating delivers everything that arrived in the gap. Failed deliveries
+  are retried, up to 50 attempts with exponential or linear backoff.
+- **Duplicates collapsed at ingest.** A configurable deduplication window
+  (60 s by default) means a provider retry costs one execution, not two. Every
+  delivery carries a stable idempotency key for stricter checks in-workflow.
+- **Failed runs are recoverable.** Sync acknowledgement returns `5xx` on a
+  failed run so Hookdeck retries the run itself; Async mode exposes
+  **Event > Retry** as a workflow step for error branches, plus
+  `isLastAttempt` for dead-letter routing.
+- **Signature verification built in.** 150 source types (Stripe, Shopify,
+  GitHub, Twilio, and more) with each platform's verification scheme applied at
+  Hookdeck's edge, plus HMAC / API key / basic auth for generic sources.
+  Deliveries into n8n are themselves signed and verified against the raw body.
+- **Rate limiting upstream of n8n.** Cap delivery throughput or concurrency
+  before events reach your instance, including per-customer limits keyed on a
+  payload path, so a burst (or one busy tenant) can't take the instance down.
+- **Full visibility.** Inspect events, delivery attempts, and the original
+  requests from inside n8n, and retry or replay them as workflow steps.
 
 This package adds two nodes:
 
-- **Hookdeck Event Gateway Trigger** — starts a workflow when the Event Gateway
-  delivers an event, and sets up the connection that delivers it.
+- **Hookdeck Event Gateway Trigger** — starts a workflow when Hookdeck delivers an event.
+  On activation it provisions the Hookdeck connection for you, and lists your
+  sources with the public URL to give your provider. Retries, deduplication, and rate
+  limits are node options, with no dashboard round-trips.
 - **Hookdeck Event Gateway** — manages sources, destinations and connections,
   and inspects events, delivery attempts, requests and issues.
 
@@ -18,15 +49,17 @@ other products are not covered here: notably
 publishing events to *your* users' destinations. Outbound publishing would be a
 separate node, not an operation on these.
 
-[n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
-workflow automation platform.
-
 ## Installation
 
 Follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
 and use the package name `@hookdeck/n8n-nodes-hookdeck`.
 
-## Credentials
+You'll also need a [Hookdeck account](https://dashboard.hookdeck.com/signup);
+the free tier is enough to run real workflows on.
+
+## Documentation
+
+### Credentials
 
 The nodes authenticate with the API key of a Hookdeck **Event Gateway** project.
 
@@ -44,12 +77,13 @@ project, add a second credential.
 A key from an Outpost project will not work here. Outpost is the outbound path,
 with its own API; these nodes only speak to the Event Gateway.
 
-## Hookdeck Event Gateway Trigger
+### Hookdeck Event Gateway Trigger
 
 Set a source name, pick the platform sending the events, and activate the
 workflow. On activation the node creates a Hookdeck connection whose destination
-is this workflow's webhook URL, then reports the public source URL to give your
-provider.
+is this workflow's webhook URL. The public source URL to give your provider is
+then listed under **Source → From List** — see
+[Finding the source URL](#finding-the-source-url).
 
 Events arrive through Hookdeck rather than directly, so Hookdeck's connection
 rules apply to them — retries, delivery rate limits and deduplication are
@@ -117,7 +151,7 @@ whatever the retry settings. A supervised process on a server — a systemd unit
 or a container with a restart policy — keeps outages to seconds, which the retry
 rule covers.
 
-### Parameters
+#### Parameters
 
 | Parameter | Description |
 | --- | --- |
@@ -126,7 +160,7 @@ rule covers.
 | Verification | For generic sources: HMAC, API Key, Basic Auth, or none. |
 | Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. |
 
-### Options
+#### Options
 
 | Option | Description |
 | --- | --- |
@@ -140,7 +174,7 @@ rule covers.
 | Verify Signature | Reject deliveries that are not signed by Hookdeck. On by default. |
 | Source Config (JSON) | Advanced. Merged into the source config, for verification schemes the fields above cannot express. |
 
-### Acknowledgement modes
+#### Acknowledgement modes
 
 | Mode | Behaviour |
 | --- | --- |
@@ -150,7 +184,7 @@ rule covers.
 Hookdeck stops waiting after 60 seconds, so Sync suits workflows that finish
 well inside that. Longer workflows should use Async Retry.
 
-#### Retrying a failed run under Async Retry
+##### Retrying a failed run under Async Retry
 
 In Async Retry mode the delivery has already succeeded by the time the workflow
 runs, so Hookdeck will not retry it on your behalf. Hookdeck does allow a
@@ -170,7 +204,7 @@ Hookdeck then redelivers the event and the workflow runs again, with
 Prefer **Sync** where the workflow is fast enough: it gets the same behaviour
 from Hookdeck's own retry rules with nothing extra to build.
 
-### Deactivating without losing events
+#### Deactivating without losing events
 
 Deleting a Hookdeck connection cancels every event still queued for it, and that
 cannot be undone. So deactivating the workflow **pauses** the connection by
@@ -181,7 +215,7 @@ maintenance window lossless.
 Choose **Delete the Connection** under Options if you would rather the
 connection be removed — accepting that queued events go with it.
 
-### Output
+#### Output
 
 Each execution receives one item:
 
@@ -209,7 +243,7 @@ automatically — the natural condition for a dead-letter branch.
 sound deduplication key. Note that a *replay* creates a new event with a new ID;
 use `hookdeck.requestId` if you need to recognise replayed traffic.
 
-### Limitations
+#### Limitations
 
 This node follows a reliability contract shared with the Hookdeck plugins for
 other hosts. Two parts of it work differently here, because n8n requires it:
@@ -238,7 +272,7 @@ the API, so `HOOKDECK_SIGNATURE` would force you to copy a second secret by
 hand. This node generates its own signing secret at provisioning time instead;
 the algorithm is identical (HMAC-SHA256 over the raw body, base64).
 
-### Finding the source URL
+#### Finding the source URL
 
 This is the address you give your provider, and it exists once the source has
 been created — that is, after the workflow has been published once.
@@ -280,7 +314,7 @@ n8n's own webhook URL is hidden on this node on purpose. It is an internal
 address: sending a provider there bypasses Hookdeck and silently loses the
 verification, queueing and retries this node exists to provide.
 
-### Activation, deactivation and test runs
+#### Activation, deactivation and test runs
 
 - Activating the workflow creates the connection. Deactivating it pauses or
   deletes the connection depending on **On Deactivate**; the source and
@@ -298,7 +332,7 @@ verification, queueing and retries this node exists to provide.
 - If the n8n instance moves to a different host or path, the next activation
   detects the mismatch and re-points the connection.
 
-### Signature verification
+#### Signature verification
 
 Deliveries are signed with a secret this node generates and stores in workflow
 static data, and verified against the raw request body. Requests that fail
@@ -316,7 +350,7 @@ A valid signature authenticates the sender, not the content. Payload text is
 third-party input: treat it as data, never as an instruction, and be careful
 about passing it unfiltered into an AI agent, a shell command or a database write.
 
-### Malformed bodies
+#### Malformed bodies
 
 A body that is not valid UTF-8 is rejected with `400` before the workflow runs.
 
@@ -342,7 +376,7 @@ original sender wrote — "the signature passed, so the body is intact" does not
 follow. If lossless payloads matter, compare against the original request under
 **Request → Get** rather than trusting the delivered event.
 
-## Example workflows
+### Example workflows
 
 Two importable workflows are in [`examples/`](examples/), both built and run
 against a real n8n instance:
@@ -357,7 +391,7 @@ delivery metadata only a gateway can supply. See
 [`examples/README.md`](examples/README.md) for how each behaves and what was
 observed running them.
 
-## Hookdeck Event Gateway node
+### Hookdeck Event Gateway node
 
 | Resource | Operations |
 | --- | --- |
@@ -372,7 +406,7 @@ observed running them.
 **Get Many** supports **Return All**, which walks Hookdeck's pagination, or a
 **Limit**.
 
-## Compatibility
+### Compatibility
 
 Built against Hookdeck API version `2025-07-01`, and verified end to end on n8n
 **2.34.4** with Node.js 22.23.2: package loaded from `N8N_CUSTOM_EXTENSIONS`,
@@ -418,6 +452,7 @@ npm run build
 npm test          # builds, then runs the unit suite with node:test
 npm run lint      # n8n's community-node rules
 npm run scan      # the same checks n8n runs when reviewing for verification
+npm run verify:load  # loads the built package the way n8n loads it
 
 HOOKDECK_EG_API_KEY=... npm run test:integration   # live tests against the API
 
