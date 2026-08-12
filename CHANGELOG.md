@@ -42,8 +42,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Live integration tests (`npm run test:integration`), which run the trigger's
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
-
-- **Get Count** on Attempt, Connection, Destination, Event, Issue, Source (from main).
+- **Get Count** on Attempt, Connection, Destination, Event, Issue and Source,
+  taking the same filters as Get Many. Both nodes are usable as agent tools, and
+  without it an agent asking "how many failed events?" received one page and
+  reported its length as the total. Connection, Destination, Issue and Source
+  count exactly via `/count`; Events have no count endpoint, so they are counted
+  by paging to a ceiling and returned as `isAtLeast: true` with `countedUpTo` —
+  a floor that says it is a floor, rather than a page size stated as a fact.
 - **Source → Get or Create** on the Hookdeck Event Gateway node, returning the
   source's public URL as workflow data. The URL cannot exist before the source
   does, so this is the way to obtain it without leaving n8n. It gets before
@@ -107,6 +112,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- A malformed signature header is refused rather than raising. `verifySignature`
+  split a value typed `string`, but `getHeaderData()` returns
+  `IncomingHttpHeaders`, where a value may be `string[]` — and the cast hid that
+  from the compiler. An array, number or object reached `.split` and threw,
+  answering `500`, which sits inside the provisioned `500-599` retry rule, so a
+  forged request was retried roughly ten times. All nine hostile headers probed
+  now return `401`. Latent rather than live, since Node joins duplicate custom
+  headers into a string.
+- A delivery that can never succeed now says so. When n8n does not expose the
+  raw request body and Verify Signature is on, every delivery fails and is
+  retried on schedule — correct, because an operator fix recovers the events,
+  but previously silent. The cause and the two ways out are logged once.
 - The published package contains only the nodes and the credential. `files`
   listed `dist` wholesale, and `n8n-node build` copies every `**/*.{png,svg}` in
   the repository into `dist` — so a README screenshot and TypeScript's build
