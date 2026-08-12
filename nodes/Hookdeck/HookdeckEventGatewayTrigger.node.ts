@@ -151,10 +151,13 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		// n8n's default here is "Go to <node> and create an event", which describes
 		// something the Event Gateway does not have: there is no create-an-event
 		// button, you send a request to the source URL and Hookdeck delivers it.
-		// This replaces n8n's "Go to <node> and create an event", which describes
-		// something the Event Gateway does not have. It is also the only text shown
-		// while the editor waits for a test event — the one moment a local n8n needs
-		// the CLI running — so it says so.
+		// Reaches n8n's setup panel only. The "Listening for test event" panel in
+		// the node view does *not* consult this: it switches on node name, with
+		// custom text for the built-in chat and form triggers and
+		// `ndv.trigger.webhookBasedNode.serviceHint` — "Go to <node> and create an
+		// event" — for everything else. So that panel cannot be corrected from
+		// here, and the note about the CLI lives in a notice instead, which is on
+		// screen beside it.
 		eventTriggerDescription:
 			'Send a request to your Hookdeck source URL. If this n8n is not reachable from the internet, events arrive through the Hookdeck CLI: run the hookdeck listen command from the workflow log first, or nothing will be delivered.',
 		activationMessage:

@@ -261,7 +261,7 @@ test('an unreachable n8n provisions a CLI destination Hookdeck accepts', { skip 
 	assert.match(setup, /Delivery Rate Limit and Delivery Group Key are not applied/);
 });
 
-test('Source Create returns the public URL the provider needs', { skip }, async (t) => {
+test('Source Get or Create returns the public URL the provider needs', { skip }, async (t) => {
 	// The point of the operation: the URL only exists once the source does, so
 	// creating it from a workflow is the one way to get it as data.
 	const sourceName = `n8n-it-create-op-${RUN_ID}`;
@@ -273,7 +273,7 @@ test('Source Create returns the public URL the provider needs', { skip }, async 
 		getNode: () => ({ name: 'Hookdeck Event Gateway' }),
 		logger: { debug() {}, warn() {}, error() {}, info() {} },
 		getNodeParameter: (name, _i, fallback) =>
-			({ resource: 'source', operation: 'create', sourceName, sourceType: 'STRIPE' }[name] ??
+			({ resource: 'source', operation: 'getOrCreate', sourceName, sourceType: 'STRIPE' }[name] ??
 			fallback),
 		helpers: {
 			async httpRequestWithAuthentication(_c, options) {

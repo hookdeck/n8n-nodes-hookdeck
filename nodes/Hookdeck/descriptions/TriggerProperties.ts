@@ -19,6 +19,18 @@ export const triggerProperties: INodeProperties[] = [
 			default: '',
 		},
 		{
+			// n8n's "Listening for test event" panel cannot be customised — it
+			// switches on node name and falls back to "Go to <node> and create an
+			// event" for everything that is not the built-in chat or form trigger.
+			// This notice sits beside that panel, which makes it the only place a
+			// local n8n can be told why nothing is arriving.
+			displayName:
+				'<b>Testing on a local n8n?</b> Events reach it through the Hookdeck CLI, so <code>hookdeck listen</code> must be running. Clicking "Execute step" creates a second Hookdeck connection for the editor\'s test URL, which a CLI started earlier is not attached to — restart it the first time, or nothing will arrive. The workflow log has the exact command.',
+			name: 'localTestingNotice',
+			type: 'notice',
+			default: '',
+		},
+		{
 			displayName: 'Acknowledgement Mode',
 			name: 'ackMode',
 			type: 'options',

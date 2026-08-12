@@ -316,11 +316,11 @@ export const sourceProperties: INodeProperties[] = [
 		displayOptions: { show: { resource: ['source'] } },
 		options: [
 			{
-				name: 'Create',
-				value: 'create',
+				name: 'Get or Create',
+				value: 'getOrCreate',
 				description:
-					'Create a source and return its public URL. Safe to re-run: if a source of that name already exists it is returned unchanged, never overwritten.',
-				action: 'Create a source',
+					'Return the source with this name, creating it if it does not exist, and give back its public URL. Safe to re-run, and never overwrites an existing source.',
+				action: 'Get or create a source',
 			},
 			{ name: 'Get', value: 'get', description: 'Retrieve a source', action: 'Get a source' },
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many sources', action: 'Get many sources' },
@@ -340,7 +340,7 @@ export const sourceProperties: INodeProperties[] = [
 		default: '',
 		required: true,
 		placeholder: 'stripe-production',
-		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		displayOptions: { show: { resource: ['source'], operation: ['getOrCreate'] } },
 		description:
 			'Name for the new source. Letters, numbers, hyphens and underscores; anything else is replaced.',
 	},
@@ -349,7 +349,7 @@ export const sourceProperties: INodeProperties[] = [
 		name: 'sourceType',
 		type: 'options',
 		default: 'WEBHOOK',
-		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		displayOptions: { show: { resource: ['source'], operation: ['getOrCreate'] } },
 		description:
 			'Platform sending events to this source. Choosing a platform applies its signature verification scheme.',
 		options: SOURCE_TYPE_OPTIONS,
@@ -359,7 +359,7 @@ export const sourceProperties: INodeProperties[] = [
 		name: 'sourceConfigJson',
 		type: 'json',
 		default: '',
-		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		displayOptions: { show: { resource: ['source'], operation: ['getOrCreate'] } },
 		description:
 			'Advanced. Sent as the source config, for verification schemes that need explicit fields, e.g. {"auth_type":"HMAC","auth":{...}}.',
 	},

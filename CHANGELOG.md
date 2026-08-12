@@ -43,9 +43,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
 
-- **Source → Create** on the Hookdeck Event Gateway node, which returns the new
+- **Source → Get or Create** on the Hookdeck Event Gateway node, returning the
   source's public URL as workflow data. The URL cannot exist before the source
-  does, so this is the way to obtain it without leaving n8n.
+  does, so this is the way to obtain it without leaving n8n. It gets before
+  creating, so it is safe to re-run and never overwrites an existing source.
+- A notice on the trigger explaining that a local n8n needs `hookdeck listen`
+  running, and that clicking "Execute step" creates a second connection an
+  already-running CLI is not attached to.
 - A link to Hookdeck's create-a-source page beside the trigger's Source field,
   and in the setup notice.
 - Two importable example workflows in `examples/`, both run against a real n8n:

@@ -417,12 +417,14 @@ observed running them.
 | Event | Get, Get Many, Retry, Mute, Cancel |
 | Issue | Get, Get Many, Update, Dismiss |
 | Request | Get, Get Many, Retry |
-| Source | Create, Get, Get Many, Get URL |
+| Source | Get or Create, Get, Get Many, Get URL |
 
-**Source → Create** is safe to re-run. Source names are unique within a project,
-so creating one twice would fail; if a source of that name already exists it is
-returned unchanged rather than overwritten. It never rewrites an existing
-source's type or verification, for the same reason the trigger does not.
+**Source → Get or Create** returns the named source, creating it only if it is
+not there, and gives back its public URL. Source names are unique within a
+project, so a plain create is not safe to re-run — `POST /sources` answers `409`
+the second time. An upsert would be, but `PUT /sources` rewrites an existing
+source's type and verification, which is the damage the trigger was changed to
+stop doing. Getting first avoids both.
 
 **Get Many** supports **Return All**, which walks Hookdeck's pagination, or a
 **Limit**.

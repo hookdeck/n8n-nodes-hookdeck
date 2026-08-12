@@ -173,7 +173,7 @@ async function executeOperation(
 			];
 		}
 
-		case 'create': {
+		case 'getOrCreate': {
 			// Sources are the one resource worth creating from a workflow: the public
 			// URL only exists once the source does, and this hands it back as data
 			// with copy-on-hover rather than sending the user to the dashboard.
