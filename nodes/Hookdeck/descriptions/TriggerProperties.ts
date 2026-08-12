@@ -73,7 +73,7 @@ export const triggerProperties: INodeProperties[] = [
 			type: 'options',
 			default: 'WEBHOOK',
 			description:
-				'Platform sending events to this source. Choosing a specific platform applies that platform\'s signature verification. Use "Webhook (Generic)" to configure verification manually.',
+				'Platform sending events to this source. This selects which signature scheme Hookdeck uses, but verification only starts once you supply the Webhook Secret below — until then the source accepts unsigned payloads. Use "Webhook (Generic)" to configure verification manually.',
 			options: SOURCE_TYPE_OPTIONS,
 		},
 		{
