@@ -207,7 +207,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 			{
 				type: 'info',
 				message:
-					'Waiting for an event? If Hookdeck cannot reach this n8n, keep <code>hookdeck listen &lt;port&gt; &lt;source&gt;</code> running alongside it — nothing is delivered without it.',
+					'Nothing arriving? If Hookdeck cannot reach this n8n — running locally, or behind NAT — events come through the Hookdeck CLI, so <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> has to be running alongside it. Instances Hookdeck can reach need none of this.',
 				whenToDisplay: 'beforeExecution',
 				location: 'outputPane',
 			},

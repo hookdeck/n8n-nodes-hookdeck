@@ -14,14 +14,14 @@ export const triggerProperties: INodeProperties[] = [
 		{
 			// One notice, deliberately. Two stacked blocks pushed the first field
 			// below the fold, and n8n's own nodes keep these to a line or two.
-			//
-			// It carries the CLI note because the node view's "Listening for test
-			// event" panel cannot be customised — it switches on node name and falls
-			// back to "Go to <node> and create an event" for everything that is not
-			// the built-in chat or form trigger. This notice sits beside that panel,
-			// so it is the only place a local n8n can be told why nothing arrives.
-displayName:
-				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish. If Hookdeck cannot reach this n8n — running it locally, or behind NAT — events are delivered through the <a href="https://hookdeck.com/docs/cli" target="_blank">Hookdeck CLI</a> instead. Keep <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> running alongside n8n, or nothing will arrive.',
+			// Deliberately says nothing about the Hookdeck CLI. That only applies to
+			// instances Hookdeck cannot reach, and `displayOptions` cannot key on the
+			// environment — so anything here is shown to every n8n Cloud user too.
+			// The CLI note lives in the output-pane hint instead, which appears only
+			// while the trigger is waiting for an event: the moment it is relevant,
+			// and invisible otherwise.
+			displayName:
+				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
