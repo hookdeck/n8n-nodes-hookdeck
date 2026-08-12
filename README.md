@@ -23,10 +23,12 @@ the node itself:
   failed run so Hookdeck retries the run itself; Async mode exposes
   **Event > Retry** as a workflow step for error branches, plus
   `isLastAttempt` for dead-letter routing.
-- **Signature verification built in.** 150 source types (Stripe, Shopify,
-  GitHub, Twilio, and more) with each platform's verification scheme applied at
-  Hookdeck's edge, plus HMAC / API key / basic auth for generic sources.
-  Deliveries into n8n are themselves signed and verified against the raw body.
+- **Signature verification at the edge.** 150 source types (Stripe, Shopify,
+  GitHub, Twilio, and more), each with that platform's own scheme, plus HMAC /
+  API key / basic auth for generic sources. Verification runs once you supply
+  the platform's signing secret — a source without one accepts unsigned
+  payloads. Deliveries into n8n are separately signed and verified against the
+  raw body.
 - **Rate limiting upstream of n8n.** Cap delivery throughput or concurrency
   before events reach your instance, including per-customer limits keyed on a
   payload path, so a burst (or one busy tenant) can't take the instance down.
@@ -86,9 +88,31 @@ configured on the node under **Options**.
 | Parameter | Description |
 | --- | --- |
 | Source | The Hookdeck source. **From List** shows every source in the project with its public URL, so you can copy the URL for your provider without leaving the canvas. **By Name** takes a new name — letters, numbers, hyphens and underscores — and creates the source on publish. |
-| Source Type | The platform sending events. Selecting a platform applies its signature verification scheme. Use **Webhook (Generic)** to configure verification yourself. |
+| Source Type | The platform sending events. This selects *which* signature scheme Hookdeck applies; it does not switch verification on by itself — see below. Use **Webhook (Generic)** to configure verification yourself. |
 | Verification | For generic sources: HMAC, API Key, Basic Auth, or none. |
 | Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. |
+
+#### Verification only starts when a secret is set
+
+Choosing a Source Type tells Hookdeck *which* signature scheme that platform
+uses. It does not enable verification on its own. A source typed `STRIPE` with
+no signing secret accepts an unsigned, forged payload and delivers it — the edge
+answers `200` and records `verified: false`.
+
+So fill in **Webhook Secret** for platform sources, or set **Verification** for
+generic ones. Two things make this easy to miss:
+
+- **The status code is not the verdict.** Hookdeck answers `200` at the edge
+  whether or not a payload verified. The answer is the `verified` field on the
+  request, under **Request → Get** (or the dashboard). Read the request detail,
+  not the list — the list omits fields the detail returns.
+- **A configured source looks identical to an unconfigured one.** The API never
+  returns the secret, or any indication one exists, so you cannot confirm it
+  from the source itself. An inbound request's `verified` field is the only
+  signal.
+
+This is separate from **Verify Signature** under Options, which covers the
+Hookdeck-to-n8n hop and is on by default.
 
 #### Options
 
