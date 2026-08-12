@@ -173,6 +173,36 @@ async function executeOperation(
 			];
 		}
 
+		case 'create': {
+			// Sources are the one resource worth creating from a workflow: the public
+			// URL only exists once the source does, and this hands it back as data
+			// with copy-on-hover rather than sending the user to the dashboard.
+			const requested = this.getNodeParameter('sourceName', i) as string;
+			const name = sanitizeName(requested).slice(0, 155);
+			if (!name) {
+				throw new NodeOperationError(this.getNode(), 'Source Name must not be empty', {
+					itemIndex: i,
+					description:
+						'Use letters, numbers, hyphens or underscores — other characters are removed.',
+				});
+			}
+
+			const body: IDataObject = { name, type: this.getNodeParameter('sourceType', i) as string };
+
+			const raw = this.getNodeParameter('sourceConfigJson', i, '') as string | IDataObject;
+			if (raw) {
+				try {
+					body.config = typeof raw === 'string' ? (JSON.parse(raw) as IDataObject) : raw;
+				} catch {
+					throw new NodeOperationError(this.getNode(), 'Source Config (JSON) is not valid JSON', {
+						itemIndex: i,
+					});
+				}
+			}
+
+			return [await hookdeckApiRequest.call(this, 'POST', basePath, body)];
+		}
+
 		case 'getUrl': {
 			const requested = this.getNodeParameter('name', i) as string;
 			// The trigger sanitises the name before creating the source, so the same

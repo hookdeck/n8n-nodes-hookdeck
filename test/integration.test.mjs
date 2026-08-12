@@ -18,6 +18,7 @@ import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 
 import { HookdeckEventGatewayTrigger } from '../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js';
+import { HookdeckEventGateway } from '../dist/nodes/Hookdeck/HookdeckEventGateway.node.js';
 
 const API_KEY = process.env.HOOKDECK_EG_API_KEY;
 const BASE_URL = 'https://api.hookdeck.com/2025-07-01';
@@ -258,4 +259,41 @@ test('an unreachable n8n provisions a CLI destination Hookdeck accepts', { skip 
 	const setup = ctx.warnings.join('\n');
 	assert.match(setup, /hookdeck listen 5678/);
 	assert.match(setup, /Delivery Rate Limit and Delivery Group Key are not applied/);
+});
+
+test('Source Create returns the public URL the provider needs', { skip }, async (t) => {
+	// The point of the operation: the URL only exists once the source does, so
+	// creating it from a workflow is the one way to get it as data.
+	const sourceName = `n8n-it-create-op-${RUN_ID}`;
+	t.after(() => cleanUp(sourceName));
+
+	const ctx = {
+		getInputData: () => [{ json: {} }],
+		continueOnFail: () => false,
+		getNode: () => ({ name: 'Hookdeck Event Gateway' }),
+		logger: { debug() {}, warn() {}, error() {}, info() {} },
+		getNodeParameter: (name, _i, fallback) =>
+			({ resource: 'source', operation: 'create', sourceName, sourceType: 'STRIPE' }[name] ??
+			fallback),
+		helpers: {
+			async httpRequestWithAuthentication(_c, options) {
+				const url = new URL(options.url);
+				for (const [k, v] of Object.entries(options.qs ?? {})) url.searchParams.set(k, String(v));
+				const res = await fetch(url, {
+					method: options.method,
+					headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
+					body: options.body === undefined ? undefined : JSON.stringify(options.body),
+				});
+				const text = await res.text();
+				return { statusCode: res.status, body: text ? JSON.parse(text) : '' };
+			},
+		},
+	};
+
+	const output = await new HookdeckEventGateway().execute.call(ctx);
+	const created = output[0][0].json;
+
+	assert.equal(created.name, sourceName);
+	assert.equal(created.type, 'STRIPE');
+	assert.match(created.url, /^https:\/\/hkdk\.events\//);
 });

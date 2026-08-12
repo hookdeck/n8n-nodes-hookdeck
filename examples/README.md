@@ -2,7 +2,7 @@
 
 Import these from n8n: **Workflows → ⋯ → Import from File**. Each one asks you
 to pick a Hookdeck Event Gateway credential on import, and the trigger needs a
-source name before it will activate.
+source name before you can publish the workflow.
 
 Both were built and run against n8n 2.34.4 with the node installed, and the
 behaviour described below is what was actually observed rather than what the

@@ -43,6 +43,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
 
+- **Source → Create** on the Hookdeck Event Gateway node, which returns the new
+  source's public URL as workflow data. The URL cannot exist before the source
+  does, so this is the way to obtain it without leaving n8n.
+- A link to Hookdeck's create-a-source page beside the trigger's Source field,
+  and in the setup notice.
 - Two importable example workflows in `examples/`, both run against a real n8n:
   an idempotency gate keyed on `hookdeck.idempotencyKey`, and a dead-letter
   branch routed on `hookdeck.isLastAttempt`.

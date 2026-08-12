@@ -13,8 +13,8 @@ package puts Hookdeck in between, and makes its guarantees configurable from
 the node itself:
 
 - **No events lost to downtime.** Events are queued durably at Hookdeck.
-  Deactivating a workflow pauses delivery instead of dropping events;
-  reactivating delivers everything that arrived in the gap. Failed deliveries
+  Unpublishing a workflow pauses delivery instead of dropping events;
+  publishing again delivers everything that arrived in the gap. Failed deliveries
   are retried, up to 50 attempts with exponential or linear backoff.
 - **Duplicates collapsed at ingest.** A configurable deduplication window
   (60 s by default) means a provider retry costs one execution, not two. Every
@@ -104,7 +104,12 @@ connection fed by it.
 
 ### How events reach n8n
 
-The trigger picks one of two delivery routes when you activate the workflow,
+> **On wording.** n8n 2.x calls making a workflow live **publishing** — the
+> button reads *Publish*, and *Unpublish* to take it down. Older versions, the
+> REST API, and the node option **On Deactivate** still say activate and
+> deactivate. They are the same thing.
+
+The trigger picks one of two delivery routes when you publish the workflow,
 based on whether Hookdeck can reach the address n8n advertises.
 
 | n8n's webhook URL | Destination | How events arrive |
@@ -224,12 +229,12 @@ Hookdeck then redelivers the event and the workflow runs again, with
 Prefer **Sync** where the workflow is fast enough: it gets the same behaviour
 from Hookdeck's own retry rules with nothing extra to build.
 
-#### Deactivating without losing events
+#### Unpublishing without losing events
 
 Deleting a Hookdeck connection cancels every event still queued for it, and that
-cannot be undone. So deactivating the workflow **pauses** the connection by
-default: inbound events are held durably, and reactivating the workflow unpauses
-it and delivers everything that arrived meanwhile. That makes a deploy or a
+cannot be undone. So unpublishing the workflow **pauses** the connection by
+default: inbound events are held durably, and publishing again unpauses it and
+delivers everything that arrived meanwhile. That makes a deploy or a
 maintenance window lossless.
 
 Choose **Delete the Connection** under Options if you would rather the
@@ -301,20 +306,22 @@ and Hookdeck generates that ID when the source is created, so it cannot be
 predicted from the name and does not exist until the source does.
 
 1. **Source → By Name**, type a name.
-2. **Activate the workflow.** The node creates the source.
+2. **Publish the workflow.** The node creates the source.
 3. **Source → From List.** Each source is listed as `name — https://hkdk.events/...`.
 4. Give that URL to Stripe, GitHub, or whatever is sending the events.
 
-There is no need to know the URL before activating. Nothing can arrive until
-your provider has been pointed at it, so activating first costs nothing.
+There is no need to know the URL before publishing. Nothing can arrive until
+your provider has been pointed at it, so publishing first costs nothing.
 
 If the source already exists in Hookdeck, skip to step 3 — pick it from the
-list, and the node leaves its Source Type and Verification alone.
+list, and the node leaves its Source Type and Verification alone. The link
+beside the field in **By Name** mode opens Hookdeck's create-a-source page, if
+you would rather make it there first.
 
-To get the URL onto your clipboard, either use the link beside the field, which
-opens that source in the Hookdeck dashboard where there is a copy button, or run
-the **Hookdeck Event Gateway** node with **Source → Get URL**, which returns it
-as workflow data with copy-on-hover. (The link deliberately does not point at
+To get the URL onto your clipboard, either use the link beside a listed source,
+which opens it in the Hookdeck dashboard where there is a copy button, or run
+the **Hookdeck Event Gateway** node with **Source → Create** or **Source → Get
+URL**, both of which return the URL as workflow data with copy-on-hover. (The link deliberately does not point at
 the source URL itself: that endpoint rejects browser `GET` requests with `405`,
 and aiming a link at your own ingest endpoint invites firing requests at it by
 accident.)
@@ -325,7 +332,7 @@ verification, queueing and retries this node exists to provide.
 
 #### Activation, deactivation and test runs
 
-- Activating the workflow creates the connection. Deactivating it pauses or
+- Publishing the workflow creates the connection. Unpublishing it pauses or
   deletes the connection depending on **On Deactivate**; the source and
   destination are left in place either way, because a source may be shared with
   other connections.
@@ -410,7 +417,7 @@ observed running them.
 | Event | Get, Get Many, Retry, Mute, Cancel |
 | Issue | Get, Get Many, Update, Dismiss |
 | Request | Get, Get Many, Retry |
-| Source | Get, Get Many, Get URL |
+| Source | Create, Get, Get Many, Get URL |
 
 **Get Many** supports **Return All**, which walks Hookdeck's pagination, or a
 **Limit**.
@@ -496,7 +503,7 @@ script checks and refuses otherwise. If your default is older, install one
 (`asdf install nodejs 22.23.2`) and point `NODE_BIN` at it rather than changing
 the machine default.
 
-No tunnel is needed. Activate the workflow; the node sees that Hookdeck cannot
+No tunnel is needed. Publish the workflow; the node sees that Hookdeck cannot
 reach this n8n, provisions a CLI destination, and writes the commands to run to
 the workflow log:
 

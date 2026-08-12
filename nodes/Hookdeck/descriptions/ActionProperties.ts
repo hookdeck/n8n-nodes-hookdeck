@@ -1,5 +1,7 @@
 import type { INodeProperties } from 'n8n-workflow';
 
+import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
+
 /**
  * Property builders.
  *
@@ -313,6 +315,12 @@ export const sourceProperties: INodeProperties[] = [
 		default: 'getAll',
 		displayOptions: { show: { resource: ['source'] } },
 		options: [
+			{
+				name: 'Create',
+				value: 'create',
+				description: 'Create a source and return its public URL',
+				action: 'Create a source',
+			},
 			{ name: 'Get', value: 'get', description: 'Retrieve a source', action: 'Get a source' },
 			{ name: 'Get Many', value: 'getAll', description: 'Retrieve many sources', action: 'Get many sources' },
 			{
@@ -324,6 +332,36 @@ export const sourceProperties: INodeProperties[] = [
 		],
 	},
 	idProperty('source', ['get'], 'Source ID', 'ID of the source'),
+	{
+		displayName: 'Name',
+		name: 'sourceName',
+		type: 'string',
+		default: '',
+		required: true,
+		placeholder: 'stripe-production',
+		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		description:
+			'Name for the new source. Letters, numbers, hyphens and underscores; anything else is replaced.',
+	},
+	{
+		displayName: 'Source Type',
+		name: 'sourceType',
+		type: 'options',
+		default: 'WEBHOOK',
+		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		description:
+			'Platform sending events to this source. Choosing a platform applies its signature verification scheme.',
+		options: SOURCE_TYPE_OPTIONS,
+	},
+	{
+		displayName: 'Source Config (JSON)',
+		name: 'sourceConfigJson',
+		type: 'json',
+		default: '',
+		displayOptions: { show: { resource: ['source'], operation: ['create'] } },
+		description:
+			'Advanced. Sent as the source config, for verification schemes that need explicit fields, e.g. {"auth_type":"HMAC","auth":{...}}.',
+	},
 	{
 		displayName: 'Source Name',
 		name: 'name',

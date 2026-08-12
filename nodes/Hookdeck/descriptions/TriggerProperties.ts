@@ -13,7 +13,7 @@ import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
 export const triggerProperties: INodeProperties[] = [
 		{
 			displayName:
-				'Name a source below and activate the workflow — the node creates it in Hookdeck. Then set Source to "From list" to see its public URL, which is the address to give Stripe, GitHub, or whatever sends your events. Already have a source? Pick it from the list; the node leaves its settings as they are.',
+				'Name a source below and publish the workflow — the node creates it in Hookdeck. Then set Source to "From list" to see its public URL, which is the address to give Stripe, GitHub, or whatever sends your events. Already have a source, or want to create one now? <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">Create it in Hookdeck</a>, then pick it from the list; the node leaves its settings as they are.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
@@ -63,11 +63,12 @@ export const triggerProperties: INodeProperties[] = [
 					name: 'name',
 					type: 'string',
 					placeholder: 'stripe-production',
-					hint: 'Created when the workflow is activated, or reused if it already exists. Switch to "From list" afterwards to see its URL.',
-					// A name alone cannot build the source URL — that is keyed on the
-					// ID Hookdeck generates. Linking to the sources list at least gives
-					// this mode a route to the URL, since otherwise it has none at all.
-					url: `=${HOOKDECK_DASHBOARD_URL}/sources`,
+					hint: 'Created when the workflow is published, or reused if it already exists. Switch to "From list" afterwards to see its URL.',
+					// A name alone cannot build the source URL — that is keyed on the ID
+					// Hookdeck generates — so this mode has no URL to link to. Point at
+					// source creation instead: it is the one useful thing to do from here,
+					// and n8n gives a node no way to offer a "create" action of its own.
+					url: `=${HOOKDECK_DASHBOARD_URL}/sources/new`,
 					validation: [
 						{
 							type: 'regex',
