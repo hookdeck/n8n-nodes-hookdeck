@@ -139,5 +139,7 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   GitHub responds by refusing to validate the file, so the workflow never ran at
   all. A release would have created the tag, run nothing, and published nothing.
   actionlint runs in CI now, because the publish workflow cannot check itself.
+  The token step that expression guarded is gone entirely: npm exchanges the
+  Actions OIDC token itself, so there was nothing for it to do.
 
 [Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/commits/main

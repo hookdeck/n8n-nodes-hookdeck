@@ -38,9 +38,12 @@
 # deprecated — see README § Releasing, "Bootstrapping the package". Every version
 # anyone installs is published from here, with provenance.
 #
-# The NPM_TOKEN step below is a fallback, not the normal path. It is skipped when
-# the secret is absent, which is how OIDC gets used. Do not leave an empty secret
-# in place: an empty credential takes precedence over OIDC and the publish fails.
+# There is no NPM_TOKEN anywhere in this workflow, and there should be no such
+# secret on the repository. npm >= 11.5.1 finds the trusted publisher itself and
+# exchanges the Actions OIDC token for a short-lived credential during publish —
+# there is nothing to inject. A token would not merely be redundant: any
+# credential in .npmrc takes precedence over OIDC, so a half-configured or empty
+# secret silently becomes the publishing identity, or fails.
 #
 # OIDC needs npm >= 11.5.1 on Node >= 22.14, which `lts/*` satisfies. The guard
 # below fails loudly rather than silently falling back if that ever stops being
@@ -61,13 +64,6 @@ jobs:
       id-token: write
       # Scoped down from the default (write) for least-privilege publishing.
       contents: read
-
-    # Hoisted here so the optional-token step below can test whether it is set.
-    # `secrets` is not an available context in a step-level `if`, and using it
-    # there does not fail that step — it fails validation of the whole file, so
-    # the workflow never runs and a release publishes nothing. `env` is allowed.
-    env:
-      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
     steps:
       - uses: actions/checkout@v5
@@ -125,12 +121,6 @@ jobs:
         run: |
           npx --yes semver -r '>=11.5.1' "$(npm -v)" >/dev/null \
             || { echo "npm $(npm -v) is too old for OIDC publishing (needs >=11.5.1)"; exit 1; }
-
-      # Skipped entirely when the secret is absent, which leaves npm to use OIDC.
-      # Setting an empty token would take precedence over OIDC and fail.
-      - name: Authenticate with a token, if one is configured
-        if: env.NPM_TOKEN != ''
-        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
 
       # RELEASE_MODE is required: `prepublishOnly` runs `n8n-node prerelease`,
       # which exits 1 without it. That guard exists to stop anyone publishing by
