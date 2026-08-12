@@ -84,10 +84,16 @@ That was resolved once, by claiming the name with a throwaway `0.0.1` published
 by hand and immediately deprecating it — see README § Releasing, "Bootstrapping
 the package". It is not something a release needs to repeat.
 
-Releases use OIDC. There should be **no `NPM_TOKEN` secret** on the repository.
-The workflow has a token step as a fallback, skipped when the secret is absent;
-do not leave an empty secret in place, because an empty credential takes
-precedence over OIDC and the publish fails.
+Releases use OIDC, and the workflow contains no token handling at all. npm
+>= 11.5.1 finds the trusted publisher itself and exchanges the Actions OIDC
+token during publish — there is nothing to inject and no `NPM_TOKEN` step to
+maintain.
+
+There should be **no `NPM_TOKEN` secret** on the repository. Adding one does not
+give you a fallback, it gives you a silent takeover: any credential in `.npmrc`
+takes precedence over OIDC, so a stale or empty secret becomes the publishing
+identity, or fails the publish. If OIDC genuinely breaks, add the step back
+deliberately as part of diagnosing it.
 
 Publishing by hand is blocked: `prepublishOnly` runs `n8n-node prerelease`,
 which exits unless `RELEASE_MODE` is set. Do not set it to work around a failing

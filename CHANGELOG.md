@@ -42,8 +42,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Live integration tests (`npm run test:integration`), which run the trigger's
   provisioning against a real Hookdeck project to confirm an existing source
   survives it. Skipped unless `HOOKDECK_EG_API_KEY` is set.
-
-- **Get Count** on Attempt, Connection, Destination, Event, Issue, Source (from main).
+- **Get Count** on Attempt, Connection, Destination, Event, Issue and Source,
+  taking the same filters as Get Many. Both nodes are usable as agent tools, and
+  without it an agent asking "how many failed events?" received one page and
+  reported its length as the total. Connection, Destination, Issue and Source
+  count exactly via `/count`; Events have no count endpoint, so they are counted
+  by paging to a ceiling and returned as `isAtLeast: true` with `countedUpTo` —
+  a floor that says it is a floor, rather than a page size stated as a fact.
 - **Source → Get or Create** on the Hookdeck Event Gateway node, returning the
   source's public URL as workflow data. The URL cannot exist before the source
   does, so this is the way to obtain it without leaving n8n. It gets before
@@ -98,6 +103,43 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   casing on 24 of them (`Docusign` → `DocuSign`, `Whatsapp` → `WhatsApp`,
   `Gocardless` → `GoCardless`, and so on).
 - `@n8n/node-cli` is pinned to `^0.42.2` rather than floating on `*`, so a build
-  is reproducible.
+  is reproducible. The lockfile records the pin too; it had kept `*` at the root,
+  leaving the pin half applied.
+- Incremental TypeScript compilation is off. It wrote `tsconfig.tsbuildinfo`
+  into `dist`, and with the file moved elsewhere `rm -rf dist` no longer
+  invalidated it, so a rebuild reported success and emitted nothing. A full
+  build takes under two seconds.
+
+### Fixed
+
+- A malformed signature header is refused rather than raising. `verifySignature`
+  split a value typed `string`, but `getHeaderData()` returns
+  `IncomingHttpHeaders`, where a value may be `string[]` — and the cast hid that
+  from the compiler. An array, number or object reached `.split` and threw,
+  answering `500`, which sits inside the provisioned `500-599` retry rule, so a
+  forged request was retried roughly ten times. All nine hostile headers probed
+  now return `401`. Latent rather than live, since Node joins duplicate custom
+  headers into a string.
+- A delivery that can never succeed now says so. When n8n does not expose the
+  raw request body and Verify Signature is on, every delivery fails and is
+  retried on schedule — correct, because an operator fix recovers the events,
+  but previously silent. The cause and the two ways out are logged once.
+- The published package contains only the nodes and the credential. `files`
+  listed `dist` wholesale, and `n8n-node build` copies every `**/*.{png,svg}` in
+  the repository into `dist` — so a README screenshot and TypeScript's build
+  state made up 505kB of the 714kB placeholder release. Now 207kB unpacked.
+- `scripts/verify-package-load.mjs` checks the packed file list, not just
+  `dist`. Every path it resolves — node, credential, codex and icon — has to be
+  in what npm would actually publish, so adding a node without extending `files`
+  fails here rather than installing as an empty package. It also warns on
+  anything packed outside `dist/nodes` and `dist/credentials`, and on any file
+  over 100kB.
+- The publish workflow can run. A step-level `if: ${{ secrets.NPM_TOKEN != '' }}`
+  is not a valid expression — `secrets` is not an available context there — and
+  GitHub responds by refusing to validate the file, so the workflow never ran at
+  all. A release would have created the tag, run nothing, and published nothing.
+  actionlint runs in CI now, because the publish workflow cannot check itself.
+  The token step that expression guarded is gone entirely: npm exchanges the
+  Actions OIDC token itself, so there was nothing for it to do.
 
 [Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/commits/main

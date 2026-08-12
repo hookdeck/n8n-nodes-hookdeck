@@ -27,6 +27,17 @@ jobs:
       - name: Install dependencies
         run: 'npm ci'
 
+      # An invalid workflow file does not fail loudly — GitHub refuses to
+      # validate it and simply never runs it, so a broken publish.yml looks
+      # exactly like a release that published nothing. That happened: a
+      # step-level `if: ${{ secrets.NPM_TOKEN != '' }}` is not a valid context
+      # there and took the whole file out. Checked here because the publish
+      # workflow, by definition, cannot check itself.
+      - name: Lint GitHub Actions workflows
+        uses: docker://rhysd/actionlint:latest
+        with:
+          args: -color
+
       - name: Run lint
         run: 'npm run lint'
 

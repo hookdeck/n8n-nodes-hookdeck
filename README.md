@@ -618,9 +618,14 @@ publishing by hand — this is the one sanctioned exception to it.
 
 Then on npmjs.com: the package → Settings → Trusted Publishers → Add a publisher
 → GitHub Actions, owner `hookdeck`, repository `n8n-nodes-hookdeck`, workflow
-`publish.yml`, environment blank. No `NPM_TOKEN` secret is needed, and none
-should be left in place — an empty credential takes precedence over OIDC and the
-publish fails.
+`publish.yml`, environment blank, allowed action `npm publish`. Environment must
+be blank because `publish.yml` declares no `environment:`, and npm matches the
+OIDC claim exactly.
+
+No `NPM_TOKEN` secret is needed and none should be added. npm finds the trusted
+publisher itself and exchanges the Actions OIDC token during publish; a token in
+`.npmrc` takes precedence over OIDC, so a stale or empty secret quietly becomes
+the publishing identity, or fails the publish.
 
 That throwaway `0.0.1` is the only version ever published without provenance,
 and it is deprecated the moment it exists. `0.1.0` onwards go through
