@@ -199,6 +199,19 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				ndvHideUrl: true,
 			},
 		],
+		// Shown in the output pane, beside n8n's "Listening for test event" — the
+		// one panel a webhook trigger cannot write to, and the moment a local n8n
+		// needs the CLI running. `beforeExecution` puts it there while waiting and
+		// takes it away once an event has arrived.
+		hints: [
+			{
+				type: 'info',
+				message:
+					'Waiting for an event? If Hookdeck cannot reach this n8n, keep <code>hookdeck listen &lt;port&gt; &lt;source&gt;</code> running alongside it — nothing is delivered without it.',
+				whenToDisplay: 'beforeExecution',
+				location: 'outputPane',
+			},
+		],
 		properties: triggerProperties,
 	};
 
