@@ -4,6 +4,7 @@ import type {
 	ILoadOptionsFunctions,
 	INodeListSearchItems,
 	INodeListSearchResult,
+	INodePropertyOptions,
 	INodeType,
 	INodeTypeDescription,
 	IWebhookFunctions,
@@ -207,7 +208,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 			{
 				type: 'info',
 				message:
-					'Waiting for an event? If Hookdeck cannot reach this n8n, keep <code>hookdeck listen &lt;port&gt; &lt;source&gt;</code> running alongside it — nothing is delivered without it.',
+					'Waiting for an event? If Hookdeck cannot reach this n8n, keep <code>hookdeck listen</code> running alongside it — nothing is delivered without it. The exact command is under <b>Local Delivery Command</b>.',
 				whenToDisplay: 'beforeExecution',
 				location: 'outputPane',
 			},
@@ -216,6 +217,51 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 	};
 
 	methods = {
+		loadOptions: {
+			/**
+			 * The exact `hookdeck listen` command for this instance and source.
+			 *
+			 * Nothing else in a node description can carry a computed value:
+			 * `activationMessage` and `eventTriggerDescription` are plain strings,
+			 * and hint messages are not expression-evaluated — verified in a running
+			 * editor, where `={{ $parameter["source"] }}` rendered literally. A
+			 * loadOptions method runs on the server with the instance URL, the
+			 * instance ID and the current parameters, so it can produce the real
+			 * command rather than a placeholder.
+			 */
+			async getCliCommand(this: ILoadOptionsFunctions): Promise<INodePropertyOptions[]> {
+				const baseUrl = this.getInstanceBaseUrl();
+				const unreachable = describeUnreachableWebhookUrl(baseUrl);
+
+				if (!unreachable) {
+					return [
+						{
+							name: 'Not needed — Hookdeck can reach this n8n directly',
+							value: '',
+							description: `Events are delivered straight to ${baseUrl}. The Hookdeck CLI is only for instances Hookdeck cannot reach.`,
+						},
+					];
+				}
+
+				const raw = this.getCurrentNodeParameter('source', { extractValue: true });
+				const sourceName = sanitizeName(typeof raw === 'string' ? raw : '').slice(0, 155);
+				const command = `hookdeck listen ${localPortFor(baseUrl)} ${
+					sourceName || '<source name>'
+				} --device-name ${buildDeviceName(baseUrl, this.getInstanceId())}`;
+
+				// Value deliberately empty, matching the field's default: an options
+				// field whose value is not among its options is flagged as a parameter
+				// issue, and this field exists to be read, not answered.
+				return [
+					{
+						name: command,
+						value: '',
+						description:
+							'Run this alongside n8n, after `hookdeck ci --api-key <your Event Gateway project API key>`. Events are not delivered while it is not running.',
+					},
+				];
+			},
+		},
 		listSearch: {
 			/**
 			 * List the project's sources, labelled with the public URL.

@@ -47,6 +47,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   source's public URL as workflow data. The URL cannot exist before the source
   does, so this is the way to obtain it without leaving n8n. It gets before
   creating, so it is safe to re-run and never overwrites an existing source.
+- **Local Delivery Command** on the trigger, showing the real `hookdeck listen`
+  command for this instance and source — actual port, source name and device
+  name — rather than a placeholder. On an instance Hookdeck can reach it says
+  the CLI is not needed.
 - A hint in the trigger's output pane, beside n8n's "Listening for test event",
   saying to keep `hookdeck listen` running. That panel's own text is not
   configurable by a community node, and this is the moment a local n8n needs it.
