@@ -128,7 +128,7 @@ function describeCliSetup(
 		'',
 		'The connection is deliberately not named in that command. Naming it would attach the CLI to this workflow\'s live connection only, and "Listen for test event" in the editor delivers over a second connection on the same source. Omitting it attaches to every connection the source has when the CLI starts — so restart the CLI after using "Listen for test event" for the first time.',
 		'',
-		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against that connection at all, so there is nothing to retry afterwards.',
+		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against that connection at all, so there is nothing to retry afterwards. See https://hookdeck.com/docs/cli',
 	].join('\n');
 }
 
@@ -151,17 +151,15 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		// n8n's default here is "Go to <node> and create an event", which describes
 		// something the Event Gateway does not have: there is no create-an-event
 		// button, you send a request to the source URL and Hookdeck delivers it.
-		// Reaches n8n's setup panel only. The "Listening for test event" panel in
-		// the node view does *not* consult this: it switches on node name, with
-		// custom text for the built-in chat and form triggers and
+		// Renders as a tooltip on the canvas, so it has to be one short line — a
+		// long sentence becomes a clipped bar across the workflow. The node view's
+		// "Listening for test event" panel does *not* use this: it switches on node
+		// name, with custom text for the built-in chat and form triggers and
 		// `ndv.trigger.webhookBasedNode.serviceHint` — "Go to <node> and create an
-		// event" — for everything else. So that panel cannot be corrected from
-		// here, and the note about the CLI lives in a notice instead, which is on
-		// screen beside it.
-		eventTriggerDescription:
-			'Send a request to your Hookdeck source URL. If this n8n is not reachable from the internet, events arrive through the Hookdeck CLI: run the hookdeck listen command from the workflow log first, or nothing will be delivered.',
+		// event" — for everything else, which cannot be corrected from here.
+		eventTriggerDescription: 'Send a request to your Hookdeck source URL',
 		activationMessage:
-			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, the workflow log has the hookdeck listen command needed to receive events.',
+			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, keep hookdeck listen running alongside it — n8n\'s server log has the exact command.',
 		defaults: {
 			name: 'Hookdeck Event Gateway Trigger',
 		},

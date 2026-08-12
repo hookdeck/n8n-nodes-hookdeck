@@ -96,7 +96,7 @@ connections, and rewriting it would change how their events are verified too.
 The node's own Source Type and Verification apply only when it creates the
 source. Note that this holds even when the types agree: a Webhook Secret or HMAC
 setting entered here does not reach a source that already exists. Whenever a
-setting is ignored, the workflow log names it.
+setting is ignored, n8n's server log names it.
 
 To deliberately reconfigure an existing source, turn on **Options → Update
 Existing Source**. That applies this node's settings to the source, and to every
@@ -126,8 +126,9 @@ uses the CLI route in production just as a laptop does.
 
 #### Running the CLI route
 
-The node writes the exact commands to the workflow log on activation. Run them
-alongside n8n:
+The node writes the exact commands to n8n's server log when the workflow is
+published — that is the console n8n itself is running in, not the **Logs** panel
+in the editor, which only shows workflow executions. Run them alongside n8n:
 
 ```bash
 hookdeck ci --api-key <your Event Gateway project API key>
@@ -516,7 +517,7 @@ the machine default.
 
 No tunnel is needed. Publish the workflow; the node sees that Hookdeck cannot
 reach this n8n, provisions a CLI destination, and writes the commands to run to
-the workflow log:
+its server log:
 
 ```bash
 hookdeck ci --api-key <your Event Gateway project API key>
