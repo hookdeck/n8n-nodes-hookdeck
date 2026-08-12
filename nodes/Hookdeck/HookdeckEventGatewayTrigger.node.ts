@@ -127,7 +127,7 @@ function describeCliSetup(
 		'  hookdeck ci --api-key <your Event Gateway project API key>',
 		`  hookdeck listen ${port} ${sourceName} ${connectionName} --device-name ${deviceName}`,
 		'',
-		'Events arriving while the CLI is not running will fail and be retried; they are not queued indefinitely.',
+		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against this connection at all, so there is nothing to retry afterwards.',
 	].join('\n');
 }
 
@@ -135,14 +135,22 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Hookdeck Event Gateway Trigger',
 		name: 'hookdeckEventGatewayTrigger',
-		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
+		// One file, which `icon-prefer-themed-variants` warns about. The warning is
+		// accepted rather than worked around: the mark sits on a solid #0044CC
+		// tile and reads identically on a light or a dark canvas, so a second
+		// variant would differ in name only. Naming this file for both themes is
+		// an `icon-validation` error, and the two byte-identical files this
+		// replaced only passed by having different names. A warning is the honest
+		// outcome; the verification scan passes either way.
+		icon: 'file:hookdeck.svg',
 		group: ['trigger'],
 		version: 1,
 		subtitle: '={{$parameter["source"]["value"] || $parameter["source"]}}',
 		description: 'Starts a workflow when Hookdeck delivers an event',
-		// `eventTriggerDescription` is deliberately unset: n8n substitutes its own
-		// "Go to Hookdeck and create an event" for webhook triggers and ignores
-		// whatever is set here, so anything put in it never reaches the user.
+		// n8n's default here is "Go to <node> and create an event", which describes
+		// something the Event Gateway does not have: there is no create-an-event
+		// button, you send a request to the source URL and Hookdeck delivers it.
+		eventTriggerDescription: 'Send a request to your Hookdeck source URL',
 		activationMessage:
 			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, the workflow log has the hookdeck listen command needed to receive events.',
 		defaults: {

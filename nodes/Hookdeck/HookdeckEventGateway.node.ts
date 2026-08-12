@@ -30,7 +30,14 @@ export class HookdeckEventGateway implements INodeType {
 	description: INodeTypeDescription = {
 		displayName: 'Hookdeck Event Gateway',
 		name: 'hookdeckEventGateway',
-		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
+		// One file, which `icon-prefer-themed-variants` warns about. The warning is
+		// accepted rather than worked around: the mark sits on a solid #0044CC
+		// tile and reads identically on a light or a dark canvas, so a second
+		// variant would differ in name only. Naming this file for both themes is
+		// an `icon-validation` error, and the two byte-identical files this
+		// replaced only passed by having different names. A warning is the honest
+		// outcome; the verification scan passes either way.
+		icon: 'file:hookdeck.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',

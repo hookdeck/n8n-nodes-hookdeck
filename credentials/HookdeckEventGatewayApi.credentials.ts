@@ -12,10 +12,7 @@ export class HookdeckEventGatewayApi implements ICredentialType {
 
 	documentationUrl = 'https://hookdeck.com/docs/api';
 
-	icon = {
-		light: 'file:../nodes/Hookdeck/hookdeck.svg',
-		dark: 'file:../nodes/Hookdeck/hookdeck.dark.svg',
-	} as const;
+	icon = 'file:../nodes/Hookdeck/hookdeck.svg' as const;
 
 	properties: INodeProperties[] = [
 		{

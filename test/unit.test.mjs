@@ -870,8 +870,9 @@ test('the CLI route logs the exact commands to run', async () => {
 	const setup = logs.join('\n');
 	assert.match(setup, /hookdeck ci --api-key/);
 	assert.match(setup, /hookdeck listen 5678 local-src n8n-wf1-node1 --device-name n8n-localhost-inst1234/);
-	// Say that events are not held indefinitely, since that is the real caveat.
-	assert.match(setup, /not queued indefinitely/);
+	// Say what actually happens when nothing is listening: no event is recorded
+	// against the connection at all, so there is nothing to retry later.
+	assert.match(setup, /not recorded against this connection/);
 });
 
 test('rate limiting set against a CLI route is reported as not applied', async () => {

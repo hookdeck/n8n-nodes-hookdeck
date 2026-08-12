@@ -139,11 +139,18 @@ listener restarting.
 - **No Delivery Rate Limit and no Delivery Group.** Hookdeck supports these on
   directly reachable destinations only. If they are set, the node does not send
   them and says so in the log.
-- **Events are not queued indefinitely.** If `hookdeck listen` is not running,
-  Hookdeck buffers for a few seconds and keeps the session eligible for two
-  minutes, then the delivery fails. The connection's retry rule then applies —
-  five exponential retries from a minute apart by default, so roughly half an
-  hour of recovery. Beyond that an event has to be retried by hand.
+- **Events are not held for a listener that is not there.** Two cases, and the
+  second is the one that bites:
+  - `hookdeck listen` was running and dropped. The session stays eligible for
+    two minutes, so the event is created and the attempt fails with
+    `CLI_UNAVAILABLE`. The connection's retry rule then applies — five
+    exponential retries from a minute apart by default, roughly half an hour of
+    recovery. Beyond that, retry it by hand.
+  - **No CLI session exists at all. No event is created for that connection.**
+    Measured: with two CLI connections on one source and a listener on only one
+    of them, the listened connection recorded two events and the unlistened one
+    recorded zero. There is nothing queued, nothing failed, and nothing to
+    retry — the delivery simply is not recorded against that connection.
 
 That last point decides whether this route suits production, and the answer
 depends on how you run the CLI. A terminal window on a laptop is not production
