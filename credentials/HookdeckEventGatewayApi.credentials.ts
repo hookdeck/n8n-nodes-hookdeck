@@ -5,17 +5,17 @@ import type {
 	INodeProperties,
 } from 'n8n-workflow';
 
-export class HookdeckApi implements ICredentialType {
-	name = 'hookdeckApi';
+export class HookdeckEventGatewayApi implements ICredentialType {
+	name = 'hookdeckEventGatewayApi';
 
-	displayName = 'Hookdeck API';
+	displayName = 'Hookdeck Event Gateway API';
 
-	documentationUrl = 'https://hookdeck.com/docs/api';
+	// The node's own docs, not Hookdeck's API reference. Nothing on
+	// hookdeck.com currently mentions n8n, so a link there answers none of the
+	// questions someone has while filling in this credential.
+	documentationUrl = 'https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#credentials';
 
-	icon = {
-		light: 'file:../nodes/Hookdeck/hookdeck.svg',
-		dark: 'file:../nodes/Hookdeck/hookdeck.dark.svg',
-	} as const;
+	icon = 'file:../nodes/Hookdeck/hookdeck.svg' as const;
 
 	properties: INodeProperties[] = [
 		{
@@ -26,7 +26,7 @@ export class HookdeckApi implements ICredentialType {
 			default: '',
 			required: true,
 			description:
-				'Project API key from Hookdeck. Find it under Project Settings → Secrets in the Hookdeck dashboard.',
+				'API key for a Hookdeck Event Gateway project. Find it under Project Settings → Secrets in the Hookdeck dashboard. Keys are scoped to one project, so everything these nodes create or read belongs to it.',
 		},
 	];
 

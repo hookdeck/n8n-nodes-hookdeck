@@ -15,7 +15,12 @@
 		"preserveConstEnums": true,
 		"esModuleInterop": true,
 		"resolveJsonModule": true,
-		"incremental": true,
+		// `incremental` is deliberately off. It wrote tsconfig.tsbuildinfo into
+		// outDir, which published 206kB of build state in 0.0.1. Moving the file
+		// out of dist fixed the packaging and broke the build instead: `rm -rf dist`
+		// no longer invalidated the state, so tsc reported success and emitted
+		// nothing, leaving dist/credentials missing. A full build is under two
+		// seconds, and `build:watch` keeps its own state in memory.
 		"declaration": true,
 		"sourceMap": true,
 		"skipLibCheck": true,

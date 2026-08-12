@@ -25,26 +25,32 @@
 		"lint": "n8n-node lint",
 		"lint:fix": "n8n-node lint --fix",
 		"scan": "node scripts/verification-scan.mjs",
-		"test": "npm run build && node --test \"test/**/*.test.mjs\"",
+		"verify:load": "npm run build && node scripts/verify-package-load.mjs",
+		"generate:source-types": "node scripts/generate-source-types.mjs",
+		"check:source-types": "node scripts/generate-source-types.mjs --check",
+		"test": "npm run build && node --test \"test/unit.test.mjs\"",
+		"test:integration": "npm run build && node --env-file-if-exists=.env --test \"test/integration.test.mjs\"",
 		"release": "n8n-node release",
 		"prepublishOnly": "n8n-node prerelease"
 	},
+	"comment:files": "An allowlist, not \"dist\": n8n-node build globs **/*.{png,svg} from the repo root into dist, which shipped a 299kB README screenshot in 0.0.1. Adding a path here without adding it to \"n8n\" below is fine; the reverse fails scripts/verify-package-load.mjs.",
 	"files": [
-		"dist"
+		"dist/nodes",
+		"dist/credentials"
 	],
 	"n8n": {
 		"n8nNodesApiVersion": 1,
 		"strict": true,
 		"credentials": [
-			"dist/credentials/HookdeckApi.credentials.js"
+			"dist/credentials/HookdeckEventGatewayApi.credentials.js"
 		],
 		"nodes": [
-			"dist/nodes/Hookdeck/Hookdeck.node.js",
-			"dist/nodes/Hookdeck/HookdeckTrigger.node.js"
+			"dist/nodes/Hookdeck/HookdeckEventGateway.node.js",
+			"dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js"
 		]
 	},
 	"devDependencies": {
-		"@n8n/node-cli": "*",
+		"@n8n/node-cli": "^0.42.2",
 		"@n8n/scan-community-package": "^0.31.0",
 		"eslint": "9.32.0",
 		"prettier": "3.6.2",

@@ -39,5 +39,12 @@ jobs:
       - name: Run n8n verification scan
         run: 'npm run scan'
 
+      # Loads the built package the way n8n does. Unit tests import dist/** by
+      # path, so they cannot catch a package n8n refuses to load at all.
+      - name: Verify the package loads
+        run: 'node scripts/verify-package-load.mjs'
+
+      # Unit only. The integration suite needs a Hookdeck API key and is run by
+      # the Integration workflow, which has access to the secret.
       - name: Run tests
-        run: 'node --test "test/**/*.test.mjs"'
+        run: 'node --test "test/unit.test.mjs"'

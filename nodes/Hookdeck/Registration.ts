@@ -7,6 +7,12 @@ export interface HookdeckRegistration {
 	sourceUrl?: string;
 	signingSecret?: string;
 	destinationUrl?: string;
+	/**
+	 * Whether this connection delivers through the Hookdeck CLI rather than
+	 * directly. Teardown differs: a CLI connection is paused rather than deleted,
+	 * so a running `hookdeck listen` stays attached to it.
+	 */
+	viaCli?: boolean;
 }
 
 /**

@@ -11,7 +11,12 @@ import type {
 } from 'n8n-workflow';
 import { NodeApiError, NodeConnectionTypes, NodeOperationError } from 'n8n-workflow';
 
-import { buildDestinationConfig, buildRules, buildSourceConfig } from './ConnectionPayload';
+import {
+	buildDestination,
+	buildRules,
+	buildSourceConfig,
+	optionsUnsupportedOverCli,
+} from './ConnectionPayload';
 import {
 	DEFAULT_HEADER_PREFIX,
 	SIGNATURE_HEADER,
@@ -22,7 +27,13 @@ import {
 	verifySignature,
 } from './Delivery';
 import { HOOKDECK_DASHBOARD_URL, hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
-import { buildResourceName, describeUnreachableWebhookUrl, sanitizeName } from './Naming';
+import {
+	buildDeviceName,
+	buildResourceName,
+	describeUnreachableWebhookUrl,
+	localPortFor,
+	sanitizeName,
+} from './Naming';
 import { registrationFor } from './Registration';
 import type { HookdeckStaticData } from './Registration';
 import { triggerProperties } from './descriptions/TriggerProperties';
@@ -30,32 +41,144 @@ import { triggerProperties } from './descriptions/TriggerProperties';
 /** How many sources to show when the list is opened without a search term. */
 const BROWSE_SOURCE_LIMIT = 250;
 
-export class HookdeckTrigger implements INodeType {
+/**
+ * Find a source by exact name, or undefined if the project has none.
+ *
+ * Hookdeck's `?name=` filter is an exact match, but it is still a list endpoint,
+ * so the single result has to be read out of the page.
+ */
+async function findSourceByName(
+	this: IHookFunctions,
+	name: string,
+): Promise<IDataObject | undefined> {
+	const matches = await hookdeckApiRequestAllItems.call(this, '/sources', { name }, 1);
+	return matches[0];
+}
+
+/**
+ * Say so when a source's own settings are being left alone.
+ *
+ * Adopting an existing source means nothing configured here reaches it. That is
+ * the safe default, but it is silent — and a user who filled in a Webhook Secret
+ * expecting it to take effect deserves to know it did not, rather than
+ * discovering it when an unverified payload arrives.
+ *
+ * Every setting that would otherwise have been sent is checked, not just the
+ * type. A source of the *same* type still keeps its own verification, so an HMAC
+ * secret entered here does not reach it either — and that case is the easiest to
+ * miss, because nothing about it looks unusual.
+ */
+function warnIgnoredSourceConfig(
+	this: IHookFunctions,
+	source: IDataObject,
+	sourceType: string,
+	options: IDataObject,
+): void {
+	const existingType = source.type as string | undefined;
+	const reasons: string[] = [];
+
+	if (existingType !== sourceType) {
+		reasons.push(`it is a ${existingType} source rather than ${sourceType}`);
+	}
+
+	const configuresVerification =
+		sourceType === 'WEBHOOK'
+			? (this.getNodeParameter('verification', 'none') as string) !== 'none'
+			: (this.getNodeParameter('platformSecret', '') as string) !== '';
+	if (configuresVerification) {
+		reasons.push('its verification stays as configured in Hookdeck');
+	}
+
+	if (options.sourceConfigJson) {
+		reasons.push('Source Config (JSON) was not applied');
+	}
+
+	if (reasons.length === 0) return;
+
+	this.logger.warn(
+		`Hookdeck Trigger: source "${source.name as string}" already exists, so it was used exactly as configured in Hookdeck and this node's source settings were not applied — ${reasons.join(
+			'; ',
+		)}. Enable Options → "Update Existing Source" to apply them, noting that this changes the source for every connection using it.`,
+	);
+}
+
+/**
+ * The commands that connect a not-publicly-reachable n8n to Hookdeck.
+ *
+ * `hookdeck ci` comes first deliberately: `hookdeck listen` otherwise uses
+ * whichever project the CLI was last logged into, and picking the wrong one
+ * fails in a way that looks like the node is broken rather than the CLI being
+ * pointed elsewhere.
+ */
+function describeCliSetup(
+	this: IHookFunctions,
+	webhookUrl: string,
+	sourceName: string,
+	reason: string | undefined,
+): string {
+	const deviceName = buildDeviceName(webhookUrl, this.getInstanceId());
+	const port = localPortFor(webhookUrl);
+
+	return [
+		`Hookdeck Event Gateway Trigger: ${reason ?? 'This n8n is not reachable from the public internet.'}`,
+		'Events will be delivered through the Hookdeck CLI. Run these alongside n8n:',
+		'',
+		'  hookdeck ci --api-key <your Event Gateway project API key>',
+		`  hookdeck listen ${port} ${sourceName} --device-name ${deviceName}`,
+		'',
+		'The connection is deliberately not named in that command. Naming it would attach the CLI to this workflow\'s live connection only, and "Listen for test event" in the editor delivers over a second connection on the same source. Omitting it attaches to every connection the source has when the CLI starts — so restart the CLI after using "Listen for test event" for the first time.',
+		'',
+		'Keep the CLI running. Events delivered while no CLI session exists are not recorded against that connection at all, so there is nothing to retry afterwards. See https://hookdeck.com/docs/cli',
+	].join('\n');
+}
+
+export class HookdeckEventGatewayTrigger implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Hookdeck Trigger',
-		name: 'hookdeckTrigger',
-		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
+		displayName: 'Hookdeck Event Gateway Trigger',
+		name: 'hookdeckEventGatewayTrigger',
+		// One file, which `icon-prefer-themed-variants` warns about. The warning is
+		// accepted rather than worked around: the mark sits on a solid #0044CC
+		// tile and reads identically on a light or a dark canvas, so a second
+		// variant would differ in name only. Naming this file for both themes is
+		// an `icon-validation` error, and the two byte-identical files this
+		// replaced only passed by having different names. A warning is the honest
+		// outcome; the verification scan passes either way.
+		icon: 'file:hookdeck.svg',
 		group: ['trigger'],
 		version: 1,
 		subtitle: '={{$parameter["source"]["value"] || $parameter["source"]}}',
 		description: 'Starts a workflow when Hookdeck delivers an event',
-		// `eventTriggerDescription` is deliberately unset: n8n substitutes its own
-		// "Go to Hookdeck and create an event" for webhook triggers and ignores
-		// whatever is set here, so anything put in it never reaches the user.
+		// n8n's default here is "Go to <node> and create an event", which describes
+		// something the Event Gateway does not have: there is no create-an-event
+		// button, you send a request to the source URL and Hookdeck delivers it.
+		// Renders as a tooltip on the canvas, so it has to be one short line — a
+		// long sentence becomes a clipped bar across the workflow. The node view's
+		// "Listening for test event" panel does *not* use this: it switches on node
+		// name, with custom text for the built-in chat and form triggers and
+		// `ndv.trigger.webhookBasedNode.serviceHint` — "Go to <node> and create an
+		// event" — for everything else, which cannot be corrected from here.
+		eventTriggerDescription: 'Send a request to your Hookdeck source URL',
 		activationMessage:
-			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider.',
+			'Your Hookdeck connection is live. Set Source to "From list" to see the URL to give your provider. If this n8n is not reachable from the internet, keep hookdeck listen running alongside it — n8n\'s server log has the exact command.',
 		defaults: {
-			name: 'Hookdeck Trigger',
+			name: 'Hookdeck Event Gateway Trigger',
 		},
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
-		// The property only accepts `true`, and the linter requires it to be set.
-		// Harmless here: a trigger has no main input, so it is never offered to an
-		// AI agent as a tool.
+		// Set because n8n requires it: `node-usable-as-tool` is an error in both
+		// the community-node lint rules and the verification scanner, and the
+		// scanner ignores inline disables — so omitting it fails verification.
+		//
+		// It is not, however, harmless. On n8n 2.34.4 this produces a companion
+		// `hookdeckEventGatewayTriggerTool` node type with an `ai_tool` output,
+		// filed under the AI category, which an agent can select and call.
+		// Calling a trigger as a tool does nothing useful — its job is to receive
+		// a delivery from Hookdeck, not to be invoked — so the entry is noise at
+		// best. There is no way to opt a trigger out and still pass the scan.
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'hookdeckApi',
+				name: 'hookdeckEventGatewayApi',
 				required: true,
 			},
 		],
@@ -74,6 +197,19 @@ export class HookdeckTrigger implements INodeType {
 				// and silently loses the verification, queueing and retries that are
 				// the entire point of this node.
 				ndvHideUrl: true,
+			},
+		],
+		// Shown in the output pane, beside n8n's "Listening for test event" — the
+		// one panel a webhook trigger cannot write to, and the moment a local n8n
+		// needs the CLI running. `beforeExecution` puts it there while waiting and
+		// takes it away once an event has arrived.
+		hints: [
+			{
+				type: 'info',
+				message:
+					'Nothing arriving? If Hookdeck cannot reach this n8n — running locally, or behind NAT — events come through the Hookdeck CLI, so <code>hookdeck listen &lt;n8n port&gt; &lt;source name&gt;</code> has to be running alongside it. Instances Hookdeck can reach need none of this.',
+				whenToDisplay: 'beforeExecution',
+				location: 'outputPane',
 			},
 		],
 		properties: triggerProperties,
@@ -183,8 +319,8 @@ export class HookdeckTrigger implements INodeType {
 			/**
 			 * Provision the Hookdeck connection that fronts this workflow.
 			 *
-			 * One idempotent upsert creates the source, the destination and the
-			 * connection together, and returns the public source URL.
+			 * One idempotent upsert creates the destination and the connection, and
+			 * either creates the source or binds to the one already there.
 			 */
 			async create(this: IHookFunctions): Promise<boolean> {
 				const webhookUrl = this.getNodeWebhookUrl('default');
@@ -192,17 +328,13 @@ export class HookdeckTrigger implements INodeType {
 					throw new NodeOperationError(this.getNode(), 'Could not resolve the n8n webhook URL');
 				}
 
+				// Hookdeck delivers over the public internet, so an n8n it cannot reach
+				// needs the other delivery route: a CLI destination, fed by
+				// `hookdeck listen` running alongside n8n. That covers a laptop and an
+				// instance behind NAT alike — this is about reachability, not about
+				// whether the workflow is a development one.
 				const unreachable = describeUnreachableWebhookUrl(webhookUrl);
-				if (unreachable) {
-					throw new NodeOperationError(
-						this.getNode(),
-						`Hookdeck cannot deliver to this n8n instance. ${unreachable}`,
-						{
-							description:
-								'Give n8n a publicly reachable address and set the WEBHOOK_URL environment variable to it, then activate again. For local development, expose n8n through a tunnel and point WEBHOOK_URL at the tunnel URL.',
-						},
-					);
-				}
+				const viaCli = unreachable !== undefined;
 
 				const staticData = this.getWorkflowStaticData('node') as HookdeckStaticData;
 				// extractValue collapses either resource locator mode to the source name.
@@ -228,18 +360,48 @@ export class HookdeckTrigger implements INodeType {
 				// a moved URL does not invalidate signatures mid-flight.
 				const signingSecret = registration.signingSecret ?? generateSigningSecret();
 
+				// Bind to an existing source by ID rather than describing it inline.
+				//
+				// The upsert is keyed on source name, so an inline `source` block
+				// rewrites the type and verification config of a source that is already
+				// there — and that source may feed other connections, whose events would
+				// silently start being verified differently, or not at all. Since
+				// Source Type defaults to WEBHOOK and Verification to none, the common
+				// path of picking an existing source from the list would otherwise strip
+				// its verification on publish.
+				//
+				// `source_id` is unambiguous: it cannot carry a type or a config, so
+				// there is nothing for the API to overwrite.
+				const existingSource = await findSourceByName.call(this, sourceName);
+				const updateExisting = options.updateExistingSource === true;
+
+				let sourceBinding: IDataObject;
+				if (existingSource && !updateExisting) {
+					warnIgnoredSourceConfig.call(this, existingSource, sourceType, options);
+					sourceBinding = { source_id: existingSource.id as string };
+				} else {
+					sourceBinding = {
+						source: {
+							name: sourceName,
+							type: sourceType,
+							config: buildSourceConfig.call(this, sourceType, options),
+						},
+					};
+				}
+
+				const destination = buildDestination(webhookUrl, signingSecret, options, viaCli);
+				const connectionName = buildResourceName('n8n', workflowId, nodeId, isTest);
+
 				const body: IDataObject = {
-					name: buildResourceName('n8n', workflowId, nodeId, isTest),
-					source: {
-						name: sourceName,
-						type: sourceType,
-						config: buildSourceConfig.call(this, sourceType, options),
-					},
+					name: connectionName,
+					...sourceBinding,
 					destination: {
 						name: buildResourceName('n8n-dest', workflowId, nodeId, isTest),
-						type: 'HTTP',
-						config: buildDestinationConfig(webhookUrl, signingSecret, options),
+						type: destination.type,
+						config: destination.config,
 					},
+					// Retries matter more on the CLI route, where they are the only thing
+					// that recovers an event delivered while `hookdeck listen` was down.
 					rules: buildRules(options),
 				};
 
@@ -257,6 +419,28 @@ export class HookdeckTrigger implements INodeType {
 				registration.sourceUrl = source?.url as string;
 				registration.signingSecret = signingSecret;
 				registration.destinationUrl = webhookUrl;
+				registration.viaCli = viaCli;
+
+				if (viaCli) {
+					// The node cannot start the CLI — n8n forbids community nodes from
+					// spawning processes — so the most it can do is say exactly what to
+					// run. `activationMessage` is a static string on the description and
+					// cannot carry these values, which leaves the log.
+					this.logger.info(
+						describeCliSetup.call(this, webhookUrl, sourceName, unreachable),
+					);
+
+					const unsupported = optionsUnsupportedOverCli(options);
+					if (unsupported.length > 0) {
+						this.logger.info(
+							`Hookdeck Event Gateway Trigger: ${unsupported.join(' and ')} ${
+								unsupported.length > 1 ? 'are' : 'is'
+							} not applied. Hookdeck supports ${
+								unsupported.length > 1 ? 'them' : 'it'
+							} on directly reachable destinations only, and this workflow receives events through the Hookdeck CLI.`,
+						);
+					}
+				}
 
 				return true;
 			},
@@ -284,19 +468,42 @@ export class HookdeckTrigger implements INodeType {
 				if (!registration.connectionId) return true;
 
 				const options = this.getNodeParameter('options', {}) as IDataObject;
-				// A test registration is always torn down completely: its connection
-				// points at a URL that stops answering after 120 seconds, so pausing it
-				// would leave a permanently broken connection behind.
-				const onDeactivate = isTest ? 'delete' : ((options.onDeactivate as string) ?? 'pause');
 
-				if (onDeactivate === 'pause') {
+				// A test registration delivering over HTTP is torn down completely: its
+				// connection points at a URL that stops answering after 120 seconds, so
+				// pausing it would leave a permanently broken connection behind.
+				//
+				// A test registration delivering over the CLI is disabled instead.
+				// Deleting it means the next "Execute step" creates a new connection
+				// that a running `hookdeck listen` is not attached to, so every test run
+				// would need the CLI restarted. Disabling keeps the connection, and its
+				// ID, so the CLI stays attached across runs — measured: after disabling
+				// and re-enabling, a still-running CLI delivered the next event.
+				//
+				// Disabled rather than paused because a paused connection *holds*
+				// events: with the CLI connected and the editor not listening, every
+				// event to the shared source was recorded against the test connection
+				// with status HOLD, and unpausing delivered the backlog. Disabled, no
+				// event is created for it at all. Leaving it enabled is worse still —
+				// each stray event would be delivered to a test path n8n no longer
+				// serves and burn the connection's retries on a 404.
+				//
+				// The connection upsert in `create` clears `disabled_at`, so the next
+				// test run re-enables it without a separate call.
+				const onDeactivate = isTest
+					? registration.viaCli
+						? 'disable'
+						: 'delete'
+					: ((options.onDeactivate as string) ?? 'pause');
+
+				if (onDeactivate === 'pause' || onDeactivate === 'disable') {
 					await hookdeckApiRequest.call(
 						this,
 						'PUT',
-						`/connections/${registration.connectionId}/pause`,
+						`/connections/${registration.connectionId}/${onDeactivate}`,
 					);
-					// Static data is kept so the next activation finds and unpauses this
-					// same connection rather than provisioning a second one.
+					// Static data is kept so the next activation finds this same
+					// connection and re-enables it, rather than provisioning a second one.
 					return true;
 				}
 

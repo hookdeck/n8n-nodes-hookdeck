@@ -1,0 +1,51 @@
+# Live tests against the Hookdeck API.
+#
+# The unit suite can prove the trigger *sends* `source_id` when a source already
+# exists, but not that Hookdeck leaves that source alone in response — and the
+# whole reason for binding by ID is that it does. Only the real API can settle
+# it, so this runs the node's own provisioning against a throwaway Event Gateway
+# project.
+#
+# Requires a HOOKDECK_EG_API_KEY repository secret holding a project API key
+# (Project Settings → Secrets). Without it the job is skipped rather than
+# failed, so pull requests from forks — which cannot read secrets — stay green.
+#
+# The suite creates and deletes real sources, destinations and connections.
+# Point the secret at a project used for nothing else.
+name: Integration
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+
+    # Fork pull requests get no secrets, so the job would fail for a reason the
+    # contributor cannot fix. Skipping keeps the signal honest.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 'lts/*'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: 'npm ci'
+
+      - name: Run integration tests
+        run: 'npm run test:integration'
+        env:
+          HOOKDECK_EG_API_KEY: ${{ secrets.HOOKDECK_EG_API_KEY }}

@@ -26,24 +26,31 @@ import { sanitizeName } from './Naming';
  * cursor pagination, and "Get URL" resolves a source by name before reading a
  * field off it. Declarative routing cannot express either.
  */
-export class Hookdeck implements INodeType {
+export class HookdeckEventGateway implements INodeType {
 	description: INodeTypeDescription = {
-		displayName: 'Hookdeck',
-		name: 'hookdeck',
-		icon: { light: 'file:hookdeck.svg', dark: 'file:hookdeck.dark.svg' },
+		displayName: 'Hookdeck Event Gateway',
+		name: 'hookdeckEventGateway',
+		// One file, which `icon-prefer-themed-variants` warns about. The warning is
+		// accepted rather than worked around: the mark sits on a solid #0044CC
+		// tile and reads identically on a light or a dark canvas, so a second
+		// variant would differ in name only. Naming this file for both themes is
+		// an `icon-validation` error, and the two byte-identical files this
+		// replaced only passed by having different names. A warning is the honest
+		// outcome; the verification scan passes either way.
+		icon: 'file:hookdeck.svg',
 		group: ['transform'],
 		version: 1,
 		subtitle: '={{$parameter["operation"] + ": " + $parameter["resource"]}}',
 		description: 'Manage the Hookdeck Event Gateway and inspect delivered events',
 		defaults: {
-			name: 'Hookdeck',
+			name: 'Hookdeck Event Gateway',
 		},
 		inputs: [NodeConnectionTypes.Main],
 		outputs: [NodeConnectionTypes.Main],
 		usableAsTool: true,
 		credentials: [
 			{
-				name: 'hookdeckApi',
+				name: 'hookdeckEventGatewayApi',
 				required: true,
 			},
 		],
@@ -211,6 +218,46 @@ async function executeOperation(
 			return [
 				await hookdeckApiRequest.call(this, 'PUT', `${basePath}/${id}`, { status: 'IGNORED' }),
 			];
+		}
+
+		case 'getOrCreate': {
+			// Sources are the one resource worth creating from a workflow: the public
+			// URL only exists once the source does, and this hands it back as data
+			// with copy-on-hover rather than sending the user to the dashboard.
+			const requested = this.getNodeParameter('sourceName', i) as string;
+			const name = sanitizeName(requested).slice(0, 155);
+			if (!name) {
+				throw new NodeOperationError(this.getNode(), 'Source Name must not be empty', {
+					itemIndex: i,
+					description:
+						'Use letters, numbers, hyphens or underscores — other characters are removed.',
+				});
+			}
+
+			// Adopt rather than fail or overwrite. Source names are unique within a
+			// project, so a plain create is not safe to re-run: POST /sources answers
+			// 409 the second time, which breaks any workflow that runs more than
+			// once. PUT would be idempotent but upserts — it rewrites an existing
+			// source's type and verification config, which is the exact damage the
+			// trigger was changed to stop doing. Returning the existing source
+			// unchanged is idempotent and destroys nothing.
+			const existing = await hookdeckApiRequestAllItems.call(this, basePath, { name }, 1);
+			if (existing.length > 0) return [existing[0]];
+
+			const body: IDataObject = { name, type: this.getNodeParameter('sourceType', i) as string };
+
+			const raw = this.getNodeParameter('sourceConfigJson', i, '') as string | IDataObject;
+			if (raw) {
+				try {
+					body.config = typeof raw === 'string' ? (JSON.parse(raw) as IDataObject) : raw;
+				} catch {
+					throw new NodeOperationError(this.getNode(), 'Source Config (JSON) is not valid JSON', {
+						itemIndex: i,
+					});
+				}
+			}
+
+			return [await hookdeckApiRequest.call(this, 'POST', basePath, body)];
 		}
 
 		case 'getUrl': {

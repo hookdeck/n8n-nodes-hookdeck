@@ -1,5 +1,5 @@
 {
-	"node": "@hookdeck/n8n-nodes-hookdeck.hookdeck",
+	"node": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": [
@@ -14,7 +14,7 @@
 		],
 		"primaryDocumentation": [
 			{
-				"url": "https://hookdeck.com/docs/api"
+				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#hookdeck-event-gateway-trigger"
 			}
 		]
 	}

@@ -22,22 +22,26 @@ import {
 	verifySignature,
 } from '../dist/nodes/Hookdeck/Delivery.js';
 import {
-	buildDestinationConfig,
+	buildDestination,
 	buildRules,
 	buildSourceConfig,
+	optionsUnsupportedOverCli,
 } from '../dist/nodes/Hookdeck/ConnectionPayload.js';
 import {
 	hookdeckApiRequest,
 	hookdeckApiRequestAllItems,
 } from '../dist/nodes/Hookdeck/GenericFunctions.js';
 import {
+	buildDeviceName,
 	buildResourceName,
 	describeUnreachableWebhookUrl,
 	isTestWebhookUrl,
+	localPortFor,
 	sanitizeName,
+	webhookPathFor,
 } from '../dist/nodes/Hookdeck/Naming.js';
-import { Hookdeck } from '../dist/nodes/Hookdeck/Hookdeck.node.js';
-import { HookdeckTrigger } from '../dist/nodes/Hookdeck/HookdeckTrigger.node.js';
+import { HookdeckEventGateway } from '../dist/nodes/Hookdeck/HookdeckEventGateway.node.js';
+import { HookdeckEventGatewayTrigger } from '../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js';
 import { registrationFor } from '../dist/nodes/Hookdeck/Registration.js';
 import { SOURCE_TYPE_AUTH, SOURCE_TYPE_OPTIONS } from '../dist/nodes/Hookdeck/SourceTypes.js';
 
@@ -304,7 +308,7 @@ test('every mapped source type is one the UI actually offers', () => {
 
 test('searchSources does not cap results when a search term is given', async () => {
 	// A cap while searching hides sources the user explicitly asked for.
-	const { searchSources } = new HookdeckTrigger().methods.listSearch;
+	const { searchSources } = new HookdeckEventGatewayTrigger().methods.listSearch;
 	const seen = [];
 	const ctx = {
 		getNode: () => ({ name: 'Hookdeck Trigger' }),
@@ -420,8 +424,8 @@ function eachProperty(properties, visit) {
 }
 
 for (const [label, NodeClass] of [
-	['Hookdeck', Hookdeck],
-	['HookdeckTrigger', HookdeckTrigger],
+	['HookdeckEventGateway', HookdeckEventGateway],
+	['HookdeckEventGatewayTrigger', HookdeckEventGatewayTrigger],
 ]) {
 	test(`${label} description is structurally valid`, () => {
 		const { description } = new NodeClass();
@@ -429,7 +433,7 @@ for (const [label, NodeClass] of [
 		assert.ok(description.displayName);
 		assert.ok(description.name);
 		assert.ok(description.icon);
-		assert.equal(description.credentials[0].name, 'hookdeckApi');
+		assert.equal(description.credentials[0].name, 'hookdeckEventGatewayApi');
 		assert.equal(description.credentials[0].required, true);
 
 		eachProperty(description.properties, (property) => {
@@ -445,7 +449,7 @@ for (const [label, NodeClass] of [
 }
 
 test('source is a resource locator offering both list and free-text entry', () => {
-	const source = new HookdeckTrigger().description.properties.find((p) => p.name === 'source');
+	const source = new HookdeckEventGatewayTrigger().description.properties.find((p) => p.name === 'source');
 
 	assert.equal(source.type, 'resourceLocator');
 	assert.equal(source.required, true);
@@ -464,7 +468,7 @@ test('source is a resource locator offering both list and free-text entry', () =
 });
 
 test('searchSources labels each source with its public URL', async () => {
-	const { searchSources } = new HookdeckTrigger().methods.listSearch;
+	const { searchSources } = new HookdeckEventGatewayTrigger().methods.listSearch;
 	const ctx = {
 		getNode: () => ({ name: 'Hookdeck Trigger' }),
 		helpers: {
@@ -511,7 +515,7 @@ test('searchSources labels each source with its public URL', async () => {
 });
 
 test('trigger declares the webhook and its full lifecycle', () => {
-	const node = new HookdeckTrigger();
+	const node = new HookdeckEventGatewayTrigger();
 	const [webhook] = node.description.webhooks;
 
 	assert.equal(webhook.name, 'default');
@@ -539,7 +543,7 @@ test('trigger declares the webhook and its full lifecycle', () => {
 });
 
 test('trigger has no main input, so it can only start a workflow', () => {
-	assert.deepEqual(new HookdeckTrigger().description.inputs, []);
+	assert.deepEqual(new HookdeckEventGatewayTrigger().description.inputs, []);
 });
 
 /**
@@ -556,9 +560,10 @@ function fakeHookContext({ webhookUrl, staticData, params = {}, mode = 'trigger'
 		getNodeWebhookUrl: () => webhookUrl,
 		getMode: () => mode,
 		getWorkflow: () => ({ id: 'wf1' }),
-		getNode: () => ({ id: 'node1', name: 'Hookdeck Trigger', type: 'hookdeckTrigger' }),
+		getNode: () => ({ id: 'node1', name: 'Hookdeck Trigger', type: 'hookdeckEventGatewayTrigger' }),
 		getNodeParameter: (name, fallback) => (name in params ? params[name] : fallback),
-		logger: { debug() {}, warn() {}, error() {} },
+		getInstanceId: () => 'inst12345678abcdef',
+		logger: { debug() {}, warn() {}, error() {}, info() {} },
 		helpers: {
 			httpRequestWithAuthentication(_cred, options) {
 				calls.push({ method: options.method, url: options.url });
@@ -576,10 +581,20 @@ function fakeHookContext({ webhookUrl, staticData, params = {}, mode = 'trigger'
 
 // The connection id is decided by the connection *name* in the upsert body,
 // which the stub above cannot see, so resolve it from the recorded call.
-async function provision(ctx, connectionId) {
-	const { create } = new HookdeckTrigger().webhookMethods.default;
+//
+// `existingSources` is what the project already has: provisioning looks a source
+// up by name before deciding whether to describe one or bind to it.
+async function provision(ctx, connectionId, existingSources = []) {
+	const { create } = new HookdeckEventGatewayTrigger().webhookMethods.default;
 	ctx.helpers.httpRequestWithAuthentication = (_cred, options) => {
-		ctx.calls.push({ method: options.method, url: options.url, body: options.body });
+		ctx.calls.push({ method: options.method, url: options.url, body: options.body, qs: options.qs });
+		if (options.method === 'GET' && options.url.endsWith('/sources')) {
+			const name = options.qs?.name;
+			return Promise.resolve({
+				statusCode: 200,
+				body: { models: existingSources.filter((s) => s.name === name) },
+			});
+		}
 		return Promise.resolve({
 			statusCode: 200,
 			body: { id: connectionId, source: { id: 'src_1', url: 'https://hkdk.events/src_1' } },
@@ -587,6 +602,169 @@ async function provision(ctx, connectionId) {
 	};
 	await create.call(ctx);
 }
+
+const upsertOf = (ctx) =>
+	ctx.calls.find((c) => c.method === 'PUT' && c.url.endsWith('/connections'));
+
+test('an existing source is adopted by ID, never rewritten', async () => {
+	// The upsert is keyed on source name, so an inline `source` block would apply
+	// this node's Source Type and Verification to a source that is already there —
+	// and to every other connection fed by it. Since Source Type defaults to
+	// WEBHOOK and Verification to none, picking a verified Stripe source from the
+	// list would otherwise strip its verification on publish.
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: { source: 'stripe-production', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [
+		{ id: 'src_existing', name: 'stripe-production', type: 'STRIPE' },
+	]);
+
+	const upsert = upsertOf(ctx);
+	assert.equal(upsert.body.source_id, 'src_existing');
+	// `source_id` cannot carry a type or a config, so there is nothing to overwrite.
+	assert.equal(upsert.body.source, undefined);
+
+	// Silently ignoring the node's own settings would be its own trap, so say so.
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /rather than WEBHOOK/);
+	assert.match(warnings[0], /Update Existing Source/);
+});
+
+test('a source that does not exist yet is created from the node settings', async () => {
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: { source: 'brand-new', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+
+	await provision(ctx, 'web_PROD', []);
+
+	const upsert = upsertOf(ctx);
+	assert.equal(upsert.body.source_id, undefined);
+	assert.equal(upsert.body.source.name, 'brand-new');
+	assert.equal(upsert.body.source.type, 'WEBHOOK');
+
+	// The lookup must be an exact-name query, not a scan of every source.
+	const lookup = ctx.calls.find((c) => c.method === 'GET' && c.url.endsWith('/sources'));
+	assert.equal(lookup.qs.name, 'brand-new');
+});
+
+test('Update Existing Source opts back in to rewriting the source', async () => {
+	// The escape hatch matters: without it there is no way to change verification
+	// on a source this node created, short of editing it in the dashboard.
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: {
+			source: 'stripe-production',
+			sourceType: 'STRIPE',
+			platformSecret: 'whsec_123',
+			options: { updateExistingSource: true },
+		},
+	});
+
+	await provision(ctx, 'web_PROD', [
+		{ id: 'src_existing', name: 'stripe-production', type: 'STRIPE' },
+	]);
+
+	const upsert = upsertOf(ctx);
+	assert.equal(upsert.body.source_id, undefined);
+	assert.equal(upsert.body.source.type, 'STRIPE');
+	assert.equal(upsert.body.source.config.auth.webhook_secret_key, 'whsec_123');
+});
+
+test('adopting a source that needs nothing said says nothing', async () => {
+	// The warning exists to flag settings that did not apply. When the node agrees
+	// with the source and configures nothing, nothing was ignored and a warning
+	// would be noise.
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: { source: 'generic', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'generic', type: 'WEBHOOK' }]);
+
+	assert.equal(upsertOf(ctx).body.source_id, 'src_existing');
+	assert.deepEqual(warnings, []);
+});
+
+test('verification entered against a same-type source is reported as ignored', async () => {
+	// The easiest case to miss: nothing about it looks unusual, the types agree,
+	// and the secret simply never reaches Hookdeck. Warning only on a type
+	// mismatch would leave this silent.
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: {
+			source: 'generic',
+			sourceType: 'WEBHOOK',
+			verification: 'HMAC',
+			hmacSecret: 'shhh',
+			hmacHeaderKey: 'x-signature',
+			hmacAlgorithm: 'sha256',
+			hmacEncoding: 'base64',
+		},
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'generic', type: 'WEBHOOK' }]);
+
+	assert.equal(upsertOf(ctx).body.source_id, 'src_existing');
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /verification stays as configured in Hookdeck/);
+});
+
+test('a platform secret entered against a same-type source is reported too', async () => {
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: { source: 'stripe-prod', sourceType: 'STRIPE', platformSecret: 'whsec_123' },
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'stripe-prod', type: 'STRIPE' }]);
+
+	assert.equal(warnings.length, 1);
+	assert.match(warnings[0], /verification stays as configured in Hookdeck/);
+	// The types agree, so that must not be given as a reason.
+	assert.doesNotMatch(warnings[0], /rather than/);
+});
+
+test('Source Config JSON that cannot apply is reported as ignored', async () => {
+	const staticData = {};
+	const warnings = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc',
+		staticData,
+		params: {
+			source: 'generic',
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			options: { sourceConfigJson: '{"auth_type":"HMAC"}' },
+		},
+	});
+	ctx.logger.warn = (message) => warnings.push(message);
+
+	await provision(ctx, 'web_PROD', [{ id: 'src_existing', name: 'generic', type: 'WEBHOOK' }]);
+
+	assert.match(warnings[0], /Source Config \(JSON\) was not applied/);
+});
 
 test('test and production registrations are stored separately', async () => {
 	// Each mode owns its slot. A shared slot would let a "Listen for test event"
@@ -636,6 +814,104 @@ test('provisioned destination disables path forwarding and signs deliveries', as
 	const retry = upsert.body.rules.find((r) => r.type === 'retry');
 	assert.deepEqual(retry.response_status_codes, ['500-599', '429']);
 	assert.ok(upsert.body.rules.some((r) => r.type === 'deduplicate'));
+});
+
+test('an unreachable n8n gets a CLI destination rather than a failed activation', async () => {
+	// Previously this threw. Hookdeck cannot reach localhost, but `hookdeck listen`
+	// can carry events to it, so the connection is provisioned against a CLI
+	// destination instead of refusing to activate at all.
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData,
+		params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+
+	await provision(ctx, 'web_PROD', []);
+
+	const destination = upsertOf(ctx).body.destination;
+	assert.equal(destination.type, 'CLI');
+	assert.equal(destination.config.path, '/webhook/abc/webhook');
+	assert.equal(destination.config.url, undefined);
+	// Same signing secret handling as the HTTP route, so webhook() is unchanged.
+	assert.equal(destination.config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.equal(staticData.production.signingSecret.length, 64);
+});
+
+test('a reachable n8n still gets an HTTP destination', async () => {
+	const staticData = {};
+	const ctx = fakeHookContext({
+		webhookUrl: 'https://n8n.example.com/webhook/abc/webhook',
+		staticData,
+		params: { source: 'public-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+
+	await provision(ctx, 'web_PROD', []);
+
+	const destination = upsertOf(ctx).body.destination;
+	assert.equal(destination.type, 'HTTP');
+	assert.equal(destination.config.url, 'https://n8n.example.com/webhook/abc/webhook');
+	assert.equal(destination.config.path, undefined);
+});
+
+test('the CLI route logs the exact commands to run', async () => {
+	// The node cannot start the CLI, so the command is the whole deliverable.
+	// A wrong port or a missing project would look like the node is broken.
+	const logs = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData: {},
+		params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+	});
+	ctx.logger.info = (message) => logs.push(message);
+
+	await provision(ctx, 'web_PROD', []);
+
+	const setup = logs.join('\n');
+	assert.match(setup, /hookdeck ci --api-key/);
+	// The connection is deliberately not named: naming it would cover only the
+	// live connection, and "Listen for test event" uses a second one.
+	assert.match(setup, /hookdeck listen 5678 local-src --device-name n8n-localhost-inst1234/);
+	assert.doesNotMatch(setup, /hookdeck listen 5678 local-src n8n-/);
+	// Say what actually happens when nothing is listening: no event is recorded
+	// against the connection at all, so there is nothing to retry later.
+	assert.match(setup, /not recorded against that connection/);
+});
+
+test('rate limiting set against a CLI route is reported as not applied', async () => {
+	const logs = [];
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook/abc/webhook',
+		staticData: {},
+		params: {
+			source: 'local-src',
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			options: { rateLimit: 10, deliveryGroupKey: 'body.id' },
+		},
+	});
+	ctx.logger.info = (message) => logs.push(message);
+
+	await provision(ctx, 'web_PROD', []);
+
+	const reported = logs.find((l) => l.includes('Delivery Rate Limit'));
+	assert.ok(reported, 'expected the unsupported options to be named');
+	assert.match(reported, /Delivery Rate Limit and Delivery Group Key are not applied/);
+});
+
+test('CLI setup helpers read the port, path and a distinct device name', () => {
+	assert.equal(localPortFor('http://localhost:5678/webhook/abc'), '5678');
+	// No explicit port means a proxy on 80/443, so fall back to what n8n serves.
+	assert.equal(localPortFor('https://n8n.example.com/webhook/abc'), '5678');
+	assert.equal(webhookPathFor('http://localhost:5678/webhook/abc/webhook'), '/webhook/abc/webhook');
+
+	// Two instances on the same host must not look like one listener restarting,
+	// or Hookdeck's session dedup would let them take each other's place.
+	const a = buildDeviceName('http://localhost:5678/webhook/x', 'aaaaaaaabbbb');
+	const b = buildDeviceName('http://localhost:5678/webhook/x', 'ccccccccdddd');
+	assert.notEqual(a, b);
+	assert.match(a, /^n8n-localhost-aaaaaaaa$/);
+	assert.match(buildDeviceName('https://n8n.example.com/webhook/x', 'zzzzzzzz'), /^n8n-n8n-example-com-zzzzzzzz$/);
 });
 
 test('registrationFor identifies a slot by the URL it was provisioned with', () => {
@@ -695,7 +971,7 @@ test('closing a test listen never touches the production connection', async () =
 		mode: 'internal',
 	});
 
-	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
 
 	assert.ok(ctx.calls.some((c) => c.method === 'DELETE' && c.url.endsWith('/connections/web_TEST')));
 	assert.ok(!ctx.calls.some((c) => c.url.includes('web_PROD')), 'production must not be touched');
@@ -734,9 +1010,70 @@ test('platform auth covers inline, choice-of-scheme and no-secret types', () => 
 	assert.deepEqual(none, {});
 });
 
+test('a CLI test connection is disabled, not deleted, so the listener stays attached', async () => {
+	// Deleting it would mean every "Execute step" creates a new connection that a
+	// running `hookdeck listen` is not attached to, so each test run would need
+	// the CLI restarted. Disabling keeps the connection and its ID.
+	//
+	// Disabled rather than paused: a paused connection holds events, so every
+	// event arriving while the editor is not listening would be delivered as a
+	// backlog on the next run.
+	const staticData = {
+		production: { connectionId: 'web_PROD', signingSecret: 'p', viaCli: true },
+		test: { connectionId: 'web_TEST', signingSecret: 't', viaCli: true },
+	};
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook-test/abc',
+		staticData,
+		params: { options: {} },
+		mode: 'internal',
+	});
+
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
+
+	assert.ok(
+		ctx.calls.some((c) => c.method === 'PUT' && c.url.endsWith('/connections/web_TEST/disable')),
+		`expected DISABLE of web_TEST, got ${JSON.stringify(ctx.calls)}`,
+	);
+	assert.ok(!ctx.calls.some((c) => c.method === 'DELETE'), 'must not delete a CLI test connection');
+	assert.ok(
+		!ctx.calls.some((c) => c.url.endsWith('/pause')),
+		'must not pause it either — a paused connection holds events',
+	);
+	// Static data is kept, so the next run finds and unpauses this same connection.
+	assert.equal(staticData.test.connectionId, 'web_TEST');
+});
+
+test('provisioning records which delivery route the connection uses', async () => {
+	const local = {};
+	await provision(
+		fakeHookContext({
+			webhookUrl: 'http://localhost:5678/webhook/abc',
+			staticData: local,
+			params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+		}),
+		'web_PROD',
+		[],
+	);
+	assert.equal(local.production.viaCli, true);
+
+	const public_ = {};
+	await provision(
+		fakeHookContext({
+			webhookUrl: 'https://n8n.example.com/webhook/abc',
+			staticData: public_,
+			params: { source: 'public-src', sourceType: 'WEBHOOK', verification: 'none' },
+		}),
+		'web_PROD',
+		[],
+	);
+	assert.equal(public_.production.viaCli, false);
+});
+
 test('deleting a test registration leaves production untouched', async () => {
 	const staticData = {
 		production: { connectionId: 'web_PROD', signingSecret: 'p' },
+		// No viaCli: this is the HTTP route, where the test URL dies after 120s.
 		test: { connectionId: 'web_TEST', signingSecret: 't' },
 	};
 	const ctx = fakeHookContext({
@@ -747,7 +1084,7 @@ test('deleting a test registration leaves production untouched', async () => {
 		mode: 'internal',
 	});
 
-	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
 
 	// A test connection points at a URL that dies after 120s, so it is always
 	// deleted outright rather than paused.
@@ -768,7 +1105,7 @@ test('deactivating production pauses rather than deletes by default', async () =
 		params: { options: {} },
 	});
 
-	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
 
 	assert.ok(ctx.calls.some((c) => c.url.endsWith('/connections/web_PROD/pause')));
 	assert.ok(!ctx.calls.some((c) => c.method === 'DELETE'));
@@ -784,7 +1121,7 @@ test('pre-split static data migrates into the production slot', async () => {
 		params: { options: {} },
 	});
 
-	await new HookdeckTrigger().webhookMethods.default.delete.call(ctx);
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
 
 	assert.ok(ctx.calls.some((c) => c.url.endsWith('/connections/web_OLD/pause')));
 	assert.equal(staticData.connectionId, undefined, 'flat field should be migrated away');
@@ -802,7 +1139,7 @@ test('status filters match the Hookdeck API enums exactly', () => {
 		issue: ['ACKNOWLEDGED', 'IGNORED', 'OPENED', 'RESOLVED'],
 	};
 
-	const { properties } = new Hookdeck().description;
+	const { properties } = new HookdeckEventGateway().description;
 
 	for (const [resource, values] of Object.entries(expected)) {
 		const filters = properties.find(
@@ -822,7 +1159,7 @@ test('status filters match the Hookdeck API enums exactly', () => {
 });
 
 test('action node covers the documented resources and operations', () => {
-	const { properties } = new Hookdeck().description;
+	const { properties } = new HookdeckEventGateway().description;
 	const resources = properties.find((p) => p.name === 'resource').options.map((o) => o.value);
 
 	assert.deepEqual(resources.sort(), [
@@ -1105,25 +1442,69 @@ test('buildRules honours explicit options, including turning rules off', () => {
 	assert.equal(retry.interval, 5000);
 });
 
-test('buildDestinationConfig disables path forwarding and signs deliveries', () => {
-	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 'sekret', {});
+test('an HTTP destination disables path forwarding and signs deliveries', () => {
+	const { type, config } = buildDestination('https://n8n.example.com/webhook/abc', 'sekret', {}, false);
+	assert.equal(type, 'HTTP');
+	assert.equal(config.url, 'https://n8n.example.com/webhook/abc');
 	assert.equal(config.path_forwarding_disabled, true);
 	assert.equal(config.auth_type, 'CUSTOM_SIGNATURE');
 	assert.deepEqual(config.auth, { key: SIGNATURE_HEADER, signing_secret: 'sekret' });
 });
 
-test('buildDestinationConfig maps rate limiting and delivery groups', () => {
-	const config = buildDestinationConfig('https://n8n.example.com/webhook/abc', 's', {
+test('an HTTP destination maps rate limiting and delivery groups', () => {
+	const { config } = buildDestination('https://n8n.example.com/webhook/abc', 's', {
 		rateLimit: 10,
 		rateLimitPeriod: 'concurrent',
 		deliveryGroupKey: 'body.customer_id',
-	});
+	}, false);
 	assert.equal(config.rate_limit, 10);
 	assert.equal(config.rate_limit_period, 'concurrent');
 	// delivery_groups is a single object, not an array, and cannot use 'concurrent'.
 	assert.equal(Array.isArray(config.delivery_groups), false);
 	assert.equal(config.delivery_groups.key, 'body.customer_id');
 	assert.notEqual(config.delivery_groups.rate_limit_period, 'concurrent');
+});
+
+test('a CLI destination carries only the path, and the same signature', () => {
+	// The signature is the point: a CLI destination accepts CUSTOM_SIGNATURE
+	// exactly as an HTTP one does, so nothing in webhook() has to know which
+	// route an event arrived by.
+	const { type, config } = buildDestination(
+		'http://localhost:5678/webhook/abc/webhook',
+		'sekret',
+		{},
+		true,
+	);
+	assert.equal(type, 'CLI');
+	assert.equal(config.path, '/webhook/abc/webhook');
+	assert.equal(config.url, undefined);
+	assert.equal(config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.deepEqual(config.auth, { key: SIGNATURE_HEADER, signing_secret: 'sekret' });
+});
+
+test('a CLI destination never carries rate limiting Hookdeck would reject', () => {
+	// CLI destinations have CUSTOM_CLI_PATH and nothing else — no
+	// MAX_DELIVERY_RATE, no delivery_groups.
+	const { config } = buildDestination('http://localhost:5678/webhook/abc', 's', {
+		rateLimit: 10,
+		rateLimitPeriod: 'concurrent',
+		deliveryGroupKey: 'body.customer_id',
+		deliveryGroupRateLimit: 2,
+	}, true);
+	assert.equal(config.rate_limit, undefined);
+	assert.equal(config.rate_limit_period, undefined);
+	assert.equal(config.delivery_groups, undefined);
+});
+
+test('options that cannot apply over the CLI are named, not silently dropped', () => {
+	assert.deepEqual(optionsUnsupportedOverCli({}), []);
+	assert.deepEqual(optionsUnsupportedOverCli({ rateLimit: 5 }), ['Delivery Rate Limit']);
+	assert.deepEqual(
+		optionsUnsupportedOverCli({ rateLimit: 5, deliveryGroupKey: 'body.id' }),
+		['Delivery Rate Limit', 'Delivery Group Key'],
+	);
+	// Options an HTTP destination also ignores are not this function's business.
+	assert.deepEqual(optionsUnsupportedOverCli({ retryCount: 3, headerPrefix: 'x-hd' }), []);
 });
 
 // ─── Action node routing ──────────────────────────────────────────────────────
@@ -1144,7 +1525,7 @@ async function runAction(params, responseBody = { ok: true }) {
 			},
 		},
 	};
-	const output = await new Hookdeck().execute.call(ctx);
+	const output = await new HookdeckEventGateway().execute.call(ctx);
 	return { calls, output };
 }
 
@@ -1365,7 +1746,7 @@ test('webhook accepts a signed delivery and exposes body, query and metadata', a
 		staticData: { production: { signingSecret: WEBHOOK_SECRET } },
 	});
 
-	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	const item = result.workflowData[0][0].json;
 
 	assert.equal(item.body.event, 'payment.succeeded');
@@ -1387,7 +1768,7 @@ test('webhook rejects an unsigned or mis-signed delivery with 401', async () => 
 			headers,
 			staticData: { production: { signingSecret: WEBHOOK_SECRET } },
 		});
-		const result = await new HookdeckTrigger().webhook.call(ctx);
+		const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 
 		assert.equal(ctx.sent.status, 401);
 		// The workflow must not run.
@@ -1404,7 +1785,7 @@ test('webhook accepts either the test or production secret', async () => {
 		headers: { 'content-type': 'application/json', [SIGNATURE_HEADER]: sign(body) },
 		staticData: { production: { signingSecret: 'other' }, test: { signingSecret: WEBHOOK_SECRET } },
 	});
-	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	assert.ok(result.workflowData);
 });
 
@@ -1418,7 +1799,7 @@ test('webhook says why it is rejecting when no secret is stored', async () => {
 		staticData: {},
 	});
 
-	await new HookdeckTrigger().webhook.call(ctx);
+	await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	assert.equal(ctx.sent.status, 401);
 	assert.match(ctx.sent.warned ?? '', /no signing secret is stored/);
 });
@@ -1433,7 +1814,7 @@ test('webhook rejects a malformed text body with 400, not 401', async () => {
 		staticData: { production: { signingSecret: WEBHOOK_SECRET } },
 	});
 
-	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	assert.equal(ctx.sent.status, 400);
 	assert.match(ctx.sent.body.message, /not valid UTF-8/);
 	assert.equal(result.noWebhookResponse, true);
@@ -1450,7 +1831,7 @@ test('webhook lets a binary body through untouched', async () => {
 	});
 	ctx.getBodyData = () => ({ binary: true });
 
-	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	assert.equal(ctx.sent.status, undefined, 'should not have written a rejection');
 	assert.ok(result.workflowData);
 });
@@ -1463,7 +1844,7 @@ test('webhook can be run with verification turned off', async () => {
 		staticData: {},
 		options: { verifySignature: false },
 	});
-	const result = await new HookdeckTrigger().webhook.call(ctx);
+	const result = await new HookdeckEventGatewayTrigger().webhook.call(ctx);
 	assert.ok(result.workflowData);
 	assert.equal(ctx.sent.status, undefined);
 });

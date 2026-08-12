@@ -12,33 +12,19 @@ import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
  */
 export const triggerProperties: INodeProperties[] = [
 		{
+			// One notice, deliberately. Two stacked blocks pushed the first field
+			// below the fold, and n8n's own nodes keep these to a line or two.
+			// Deliberately says nothing about the Hookdeck CLI. That only applies to
+			// instances Hookdeck cannot reach, and `displayOptions` cannot key on the
+			// environment — so anything here is shown to every n8n Cloud user too.
+			// The CLI note lives in the output-pane hint instead, which appears only
+			// while the trigger is waiting for an event: the moment it is relevant,
+			// and invisible otherwise.
 			displayName:
-				'Quickest setup: <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create the source in Hookdeck</a>, copy its URL for your provider, then pick it below. Otherwise name a new source below and click "Test this trigger" (Output panel, right) to create it — then Stop Listening, switch Source to "From list" and re-pick it to see the URL.',
+				'The URL to give your provider appears under <b>Source → From list</b> once the source exists — <a href="https://dashboard.hookdeck.com/sources/new" target="_blank">create one in Hookdeck</a>, or name one below and publish.',
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
-		},
-		{
-			displayName: 'Acknowledgement Mode',
-			name: 'ackMode',
-			type: 'options',
-			default: 'async_retry',
-			options: [
-				{
-					name: 'Async Retry',
-					value: 'async_retry',
-					description:
-						'Acknowledge as soon as the event is received, then run the workflow. Fastest, and the sender never waits.',
-				},
-				{
-					name: 'Sync',
-					value: 'sync',
-					description:
-						'Hold the response until the workflow finishes. A failed run answers with an error so Hookdeck retries it.',
-				},
-			],
-			description:
-				'When to answer Hookdeck. Use Sync to have Hookdeck retry runs that fail. Hookdeck stops waiting after 60 seconds, so Sync suits workflows that finish well inside that.',
 		},
 		{
 			displayName: 'Source',
@@ -63,11 +49,12 @@ export const triggerProperties: INodeProperties[] = [
 					name: 'name',
 					type: 'string',
 					placeholder: 'stripe-production',
-					hint: 'Reused if it exists, otherwise created. Switch to "From list" and re-select it to see its URL.',
-					// A name alone cannot build the source URL — that is keyed on the
-					// ID Hookdeck generates. Linking to the sources list at least gives
-					// this mode a route to the URL, since otherwise it has none at all.
-					url: `=${HOOKDECK_DASHBOARD_URL}/sources`,
+					hint: 'Created when the workflow is published, or reused if it already exists. Switch to "From list" afterwards to see its URL.',
+					// A name alone cannot build the source URL — that is keyed on the ID
+					// Hookdeck generates — so this mode has no URL to link to. Point at
+					// source creation instead: it is the one useful thing to do from here,
+					// and n8n gives a node no way to offer a "create" action of its own.
+					url: `=${HOOKDECK_DASHBOARD_URL}/sources/new`,
 					validation: [
 						{
 							type: 'regex',
@@ -238,6 +225,28 @@ export const triggerProperties: INodeProperties[] = [
 			description: 'Expected basic auth password',
 		},
 		{
+			displayName: 'Acknowledgement Mode',
+			name: 'ackMode',
+			type: 'options',
+			default: 'async_retry',
+			options: [
+				{
+					name: 'Async Retry',
+					value: 'async_retry',
+					description:
+						'Acknowledge as soon as the event is received, then run the workflow. Fastest, and the sender never waits.',
+				},
+				{
+					name: 'Sync',
+					value: 'sync',
+					description:
+						'Hold the response until the workflow finishes. A failed run answers with an error so Hookdeck retries it.',
+				},
+			],
+			description:
+				'When to answer Hookdeck. Use Sync to have Hookdeck retry runs that fail. Hookdeck stops waiting after 60 seconds, so Sync suits workflows that finish well inside that.',
+		},
+		{
 			displayName: 'Options',
 			name: 'options',
 			type: 'collection',
@@ -367,6 +376,14 @@ export const triggerProperties: INodeProperties[] = [
 					default: '',
 					description:
 						'Advanced. Merged into the source config sent to Hookdeck, overriding the fields above. Use for verification schemes that need more than a single secret.',
+				},
+				{
+					displayName: 'Update Existing Source',
+					name: 'updateExistingSource',
+					type: 'boolean',
+					default: false,
+					description:
+						'Whether to apply this node\'s Source Type and Verification to a source that already exists. Off by default: a source can feed several connections, and rewriting it changes how their events are verified too. Leave off to adopt the existing source exactly as it is configured in Hookdeck.',
 				},
 				{
 					displayName: 'Verify Signature',
