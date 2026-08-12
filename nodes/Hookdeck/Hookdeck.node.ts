@@ -95,6 +95,17 @@ function toExecutionData(rows: IDataObject[], itemIndex: number): INodeExecution
 	return rows.map((json) => ({ json, pairedItem: { item: itemIndex } }));
 }
 
+/**
+ * Resources Hookdeck can count exactly, via a `/count` endpoint.
+ *
+ * Events are deliberately absent: `/events/count` does not exist, so counting
+ * them means paging, and a paged count can only ever be a floor.
+ */
+const COUNTABLE_RESOURCES = new Set(['connection', 'destination', 'issue', 'source']);
+
+/** How far to page when counting a resource Hookdeck cannot count for us. */
+const EVENT_COUNT_CEILING = 500;
+
 /** Collection path for each resource. */
 const RESOURCE_PATH: Record<string, string> = {
 	attempt: '/attempts',
@@ -127,6 +138,39 @@ async function executeOperation(
 		case 'get': {
 			const id = this.getNodeParameter('id', i) as string;
 			return [await hookdeckApiRequest.call(this, 'GET', `${basePath}/${id}`)];
+		}
+
+		case 'getCount': {
+			const filters = this.getNodeParameter('filters', i, {}) as IDataObject;
+
+			// Hookdeck counts most things exactly, but has no /events/count. Paging
+			// to a ceiling and reporting it as a total is how a caller — an AI agent
+			// especially — ends up stating a page size as a fact, so events return a
+			// floor that says it is one.
+			if (!COUNTABLE_RESOURCES.has(resource)) {
+				const found = await hookdeckApiRequestAllItems.call(
+					this,
+					basePath,
+					filters,
+					EVENT_COUNT_CEILING,
+				);
+				return [
+					{
+						count: found.length,
+						isAtLeast: found.length >= EVENT_COUNT_CEILING,
+						countedUpTo: EVENT_COUNT_CEILING,
+					},
+				];
+			}
+
+			const response = await hookdeckApiRequest.call(
+				this,
+				'GET',
+				`${basePath}/count`,
+				{},
+				filters,
+			);
+			return [{ count: response.count, isAtLeast: false }];
 		}
 
 		case 'getAll': {
