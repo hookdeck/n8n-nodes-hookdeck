@@ -338,8 +338,12 @@ verification, queueing and retries this node exists to provide.
   other connections.
 - **Listen for test event** provisions a *separate* connection against n8n's test
   URL, tracked independently, so a test run never disturbs the production
-  connection. That test connection is always deleted when the listen window
-  closes, since the URL behind it stops answering after 120 seconds.
+  connection. On the direct route that connection is deleted when the listen
+  window closes, since the URL behind it stops answering after 120 seconds. On
+  the CLI route it is **paused** instead: deleting it would mean every test run
+  created a new connection that a running `hookdeck listen` is not attached to,
+  so the CLI would need restarting each time. Paused, it keeps its ID, the CLI
+  stays attached, and the next test run unpauses it.
 - Both connections share one source, so they share one source URL — there is no
   second URL to configure for testing. The flip side is that while you are
   listening for a test event **on a workflow that is also published**, each

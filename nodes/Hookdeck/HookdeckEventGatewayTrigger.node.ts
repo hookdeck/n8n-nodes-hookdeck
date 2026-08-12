@@ -408,6 +408,7 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				registration.sourceUrl = source?.url as string;
 				registration.signingSecret = signingSecret;
 				registration.destinationUrl = webhookUrl;
+				registration.viaCli = viaCli;
 
 				if (viaCli) {
 					// The node cannot start the CLI — n8n forbids community nodes from
@@ -456,10 +457,23 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 				if (!registration.connectionId) return true;
 
 				const options = this.getNodeParameter('options', {}) as IDataObject;
-				// A test registration is always torn down completely: its connection
-				// points at a URL that stops answering after 120 seconds, so pausing it
-				// would leave a permanently broken connection behind.
-				const onDeactivate = isTest ? 'delete' : ((options.onDeactivate as string) ?? 'pause');
+
+				// A test registration delivering over HTTP is torn down completely: its
+				// connection points at a URL that stops answering after 120 seconds, so
+				// pausing it would leave a permanently broken connection behind.
+				//
+				// A test registration delivering over the CLI is paused instead. Deleting
+				// it means the next "Execute step" creates a new connection that a
+				// running `hookdeck listen` is not attached to, so every single test run
+				// would need the CLI restarted. Pausing keeps the connection — and its
+				// ID — so the CLI stays attached across runs, and `create` unpauses it.
+				// Hookdeck routes to paused CLI connections' sessions too: session
+				// eligibility includes paused webhooks by design.
+				const onDeactivate = isTest
+					? registration.viaCli
+						? 'pause'
+						: 'delete'
+					: ((options.onDeactivate as string) ?? 'pause');
 
 				if (onDeactivate === 'pause') {
 					await hookdeckApiRequest.call(

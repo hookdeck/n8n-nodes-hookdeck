@@ -1010,9 +1010,62 @@ test('platform auth covers inline, choice-of-scheme and no-secret types', () => 
 	assert.deepEqual(none, {});
 });
 
+test('a CLI test connection is paused, not deleted, so the listener stays attached', async () => {
+	// Deleting it would mean every "Execute step" creates a new connection that a
+	// running `hookdeck listen` is not attached to, so each test run would need
+	// the CLI restarted. Pausing keeps the connection and its ID.
+	const staticData = {
+		production: { connectionId: 'web_PROD', signingSecret: 'p', viaCli: true },
+		test: { connectionId: 'web_TEST', signingSecret: 't', viaCli: true },
+	};
+	const ctx = fakeHookContext({
+		webhookUrl: 'http://localhost:5678/webhook-test/abc',
+		staticData,
+		params: { options: {} },
+		mode: 'internal',
+	});
+
+	await new HookdeckEventGatewayTrigger().webhookMethods.default.delete.call(ctx);
+
+	assert.ok(
+		ctx.calls.some((c) => c.method === 'PUT' && c.url.endsWith('/connections/web_TEST/pause')),
+		`expected PAUSE of web_TEST, got ${JSON.stringify(ctx.calls)}`,
+	);
+	assert.ok(!ctx.calls.some((c) => c.method === 'DELETE'), 'must not delete a CLI test connection');
+	// Static data is kept, so the next run finds and unpauses this same connection.
+	assert.equal(staticData.test.connectionId, 'web_TEST');
+});
+
+test('provisioning records which delivery route the connection uses', async () => {
+	const local = {};
+	await provision(
+		fakeHookContext({
+			webhookUrl: 'http://localhost:5678/webhook/abc',
+			staticData: local,
+			params: { source: 'local-src', sourceType: 'WEBHOOK', verification: 'none' },
+		}),
+		'web_PROD',
+		[],
+	);
+	assert.equal(local.production.viaCli, true);
+
+	const public_ = {};
+	await provision(
+		fakeHookContext({
+			webhookUrl: 'https://n8n.example.com/webhook/abc',
+			staticData: public_,
+			params: { source: 'public-src', sourceType: 'WEBHOOK', verification: 'none' },
+		}),
+		'web_PROD',
+		[],
+	);
+	assert.equal(public_.production.viaCli, false);
+});
+
 test('deleting a test registration leaves production untouched', async () => {
 	const staticData = {
 		production: { connectionId: 'web_PROD', signingSecret: 'p' },
+		// No viaCli: this is the HTTP route, where the test URL dies after 120s.
 		test: { connectionId: 'web_TEST', signingSecret: 't' },
 	};
 	const ctx = fakeHookContext({

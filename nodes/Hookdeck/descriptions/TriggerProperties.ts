@@ -31,28 +31,6 @@ export const triggerProperties: INodeProperties[] = [
 			default: '',
 		},
 		{
-			displayName: 'Acknowledgement Mode',
-			name: 'ackMode',
-			type: 'options',
-			default: 'async_retry',
-			options: [
-				{
-					name: 'Async Retry',
-					value: 'async_retry',
-					description:
-						'Acknowledge as soon as the event is received, then run the workflow. Fastest, and the sender never waits.',
-				},
-				{
-					name: 'Sync',
-					value: 'sync',
-					description:
-						'Hold the response until the workflow finishes. A failed run answers with an error so Hookdeck retries it.',
-				},
-			],
-			description:
-				'When to answer Hookdeck. Use Sync to have Hookdeck retry runs that fail. Hookdeck stops waiting after 60 seconds, so Sync suits workflows that finish well inside that.',
-		},
-		{
 			displayName: 'Source',
 			name: 'source',
 			type: 'resourceLocator',
@@ -249,6 +227,28 @@ export const triggerProperties: INodeProperties[] = [
 				},
 			},
 			description: 'Expected basic auth password',
+		},
+		{
+			displayName: 'Acknowledgement Mode',
+			name: 'ackMode',
+			type: 'options',
+			default: 'async_retry',
+			options: [
+				{
+					name: 'Async Retry',
+					value: 'async_retry',
+					description:
+						'Acknowledge as soon as the event is received, then run the workflow. Fastest, and the sender never waits.',
+				},
+				{
+					name: 'Sync',
+					value: 'sync',
+					description:
+						'Hold the response until the workflow finishes. A failed run answers with an error so Hookdeck retries it.',
+				},
+			],
+			description:
+				'When to answer Hookdeck. Use Sync to have Hookdeck retry runs that fail. Hookdeck stops waiting after 60 seconds, so Sync suits workflows that finish well inside that.',
 		},
 		{
 			displayName: 'Options',
