@@ -4,7 +4,7 @@
 # notes people actually read, and starts this workflow. Nothing publishes from
 # a bare tag push, and nothing publishes from a laptop.
 #
-# See README § Releasing for the steps, and skills/n8n-nodes-hookdeck-release
+# See CONTRIBUTING.md § Releasing for the steps, and skills/n8n-nodes-hookdeck-release
 # for the agent-assisted version — choosing the version, drafting the notes,
 # and the gates that have to pass first.
 #
@@ -35,7 +35,7 @@
 # Trusted publishers are configured on an *existing* package's settings page, so
 # a package that has never been published cannot use OIDC for its first release.
 # The name is claimed with a throwaway version published by hand, which is then
-# deprecated — see README § Releasing, "Bootstrapping the package". Every version
+# deprecated — see CONTRIBUTING.md § Releasing, "Bootstrapping the package". Every version
 # anyone installs is published from here, with provenance.
 #
 # There is no NPM_TOKEN anywhere in this workflow, and there should be no such
