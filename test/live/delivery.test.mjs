@@ -142,7 +142,14 @@ test('real deliveries into the node', { skip, concurrency: false }, async (t) =>
 			return { handled: true };
 		});
 
-		await ingest(receiver.ingestUrl, JSON.stringify({ marker, event: 'survives.the.outage' }));
+		// Asserted, not fired and forgotten: an ingest the edge refused produces no
+		// event at all, and the wait below would then blame a retry that was never
+		// going to happen.
+		const accepted = await ingest(
+			receiver.ingestUrl,
+			JSON.stringify({ marker, event: 'survives.the.outage' }),
+		);
+		assert.ok(accepted.ok, `the edge refused the event: ${accepted.status}`);
 
 		const delivered = await receiver.waitFor(marker, { attempts: 150 });
 		receiver.setHandler(null);
@@ -176,10 +183,10 @@ test('real deliveries into the node', { skip, concurrency: false }, async (t) =>
 
 		const marker = `dedup-${PREFIX}`;
 		const body = JSON.stringify({ marker, event: 'charge.succeeded' });
-		await ingest(receiver.ingestUrl, body);
+		assert.ok((await ingest(receiver.ingestUrl, body)).ok, 'the edge refused the first event');
 		await receiver.waitFor(marker);
 
-		await ingest(receiver.ingestUrl, body);
+		assert.ok((await ingest(receiver.ingestUrl, body)).ok, 'the edge refused the duplicate');
 		// Give the duplicate the grace the first delivery needed, so a pass here
 		// means suppressed rather than merely slower.
 		await new Promise((resolve) => setTimeout(resolve, 20000));
@@ -200,7 +207,11 @@ test('real deliveries into the node', { skip, concurrency: false }, async (t) =>
 		);
 
 		const marker = `queued-${PREFIX}`;
-		await ingest(receiver.ingestUrl, JSON.stringify({ marker, event: 'sent.during.downtime' }));
+		const sent = await ingest(
+			receiver.ingestUrl,
+			JSON.stringify({ marker, event: 'sent.during.downtime' }),
+		);
+		assert.ok(sent.ok, `the edge refused the event: ${sent.status}`);
 
 		await new Promise((resolve) => setTimeout(resolve, 8000));
 		assert.equal(receiver.matching(marker).length, 0, 'a paused connection delivered anyway');
