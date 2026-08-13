@@ -191,7 +191,7 @@ export async function ingest(url, body, headers = {}) {
 
 /* ───────────────────────────── node contexts ─────────────────────────── */
 
-export async function liveHttpHelper(_credentialType, options) {
+export async function liveHttpHelper(_credentialType, options, attempt = 0) {
 	const url = new URL(options.url);
 	for (const [key, value] of Object.entries(options.qs ?? {})) {
 		if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
@@ -201,8 +201,30 @@ export async function liveHttpHelper(_credentialType, options) {
 		headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
 		body: options.body === undefined ? undefined : JSON.stringify(options.body),
 	});
+
+	// The node's own transport, so it needs the same rate-limit handling as
+	// `api()`. Without it a 429 surfaces as whatever the node makes of a failed
+	// request, which is a test failing for the one reason it is not about.
+	if (response.status === 429 && attempt < 4) {
+		const after = Number(response.headers.get('retry-after'));
+		const waitMs = Math.min(Number.isFinite(after) ? after * 1000 : 2000 * 2 ** attempt, 65000);
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
+		return await liveHttpHelper(_credentialType, options, attempt + 1);
+	}
+
+	// n8n's helper hands back a body it could not parse rather than throwing, and
+	// Hookdeck answers some errors in plain text. Parsing strictly here would
+	// invent a failure mode the node never sees in production.
 	const text = await response.text();
-	const parsed = text ? JSON.parse(text) : '';
+	let parsed = '';
+	if (text) {
+		try {
+			parsed = JSON.parse(text);
+		} catch {
+			parsed = text;
+		}
+	}
+
 	if (options.returnFullResponse || options.ignoreHttpStatusErrors) {
 		return { statusCode: response.status, body: parsed };
 	}
