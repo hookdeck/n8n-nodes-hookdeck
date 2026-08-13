@@ -31,7 +31,11 @@
 		"test": "npm run build && node --test \"test/unit.test.mjs\"",
 		"test:integration": "npm run build && node --env-file-if-exists=.env --test \"test/integration.test.mjs\"",
 		"release": "n8n-node release",
-		"prepublishOnly": "n8n-node prerelease"
+		"prepublishOnly": "n8n-node prerelease",
+		"test:live": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 --test-timeout=900000 \"test/live/*.test.mjs\"",
+		"test:live:api": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 --test-timeout=900000 test/live/api.test.mjs",
+		"test:live:delivery": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 --test-timeout=900000 test/live/verification.test.mjs test/live/delivery.test.mjs",
+		"test:live:stripe": "npm run build && node --env-file-if-exists=.env --test --test-concurrency=1 --test-timeout=900000 test/live/stripe.test.mjs"
 	},
 	"comment:files": "An allowlist, not \"dist\": n8n-node build globs **/*.{png,svg} from the repo root into dist, which shipped a 299kB README screenshot in 0.0.1. Adding a path here without adding it to \"n8n\" below is fine; the reverse fails scripts/verify-package-load.mjs.",
 	"files": [
