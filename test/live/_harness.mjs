@@ -15,7 +15,7 @@
  * cleanup deleting a resource another is still using.
  */
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 
@@ -192,9 +192,11 @@ export async function liveHttpHelper(_credentialType, options) {
 
 /** An IHookFunctions whose HTTP helper reaches the real API. */
 export function liveHookContext({ webhookUrl, staticData, params, mode = 'trigger' }) {
-	const logs = [];
+	// warn and info are the two levels the node uses for operator-facing setup
+	// guidance, and several tests assert on exactly what it said.
+	const warnings = [];
 	return {
-		logs,
+		warnings,
 		getWorkflowStaticData: () => staticData,
 		getNodeWebhookUrl: () => webhookUrl,
 		getMode: () => mode,
@@ -204,12 +206,18 @@ export function liveHookContext({ webhookUrl, staticData, params, mode = 'trigge
 		getInstanceId: () => `live${RUN_ID}`,
 		logger: {
 			debug() {},
-			info: (m) => logs.push(m),
-			warn: (m) => logs.push(m),
-			error: (m) => logs.push(m),
+			info: (m) => warnings.push(m),
+			warn: (m) => warnings.push(m),
+			error() {},
 		},
 		helpers: { httpRequestWithAuthentication: liveHttpHelper },
 	};
+}
+
+/** Whether a command is on PATH, for suites that shell out to a CLI. */
+export function hasCommand(name) {
+	const probe = spawnSync('command', ['-v', name], { shell: true, stdio: 'ignore' });
+	return probe.status === 0;
 }
 
 /** An IWebhookFunctions over a real inbound request. */
@@ -255,6 +263,7 @@ export function liveExecuteContext(params) {
 		continueOnFail: () => false,
 		getNode: () => ({ name: 'Hookdeck Event Gateway' }),
 		getNodeParameter: (name, _i, fallback) => (name in params ? params[name] : fallback),
+		logger: { debug() {}, info() {}, warn() {}, error() {} },
 		helpers: { httpRequestWithAuthentication: liveHttpHelper },
 	};
 }
