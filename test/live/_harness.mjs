@@ -15,7 +15,7 @@
  * cleanup deleting a resource another is still using.
  */
 import { createServer } from 'node:http';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
 
@@ -26,13 +26,28 @@ export const skip = API_KEY ? false : 'HOOKDECK_EG_API_KEY is not set';
 export const RUN_ID = randomBytes(4).toString('hex');
 export const PREFIX = `n8n-live-${RUN_ID}`;
 
-/** Call the Hookdeck API directly, to arrange fixtures and assert real state. */
-export async function api(method, path, body) {
+/**
+ * Call the Hookdeck API directly, to arrange fixtures and assert real state.
+ *
+ * Retries on 429. The project allows 240 requests a minute and these suites run
+ * back to back, so a burst is expected rather than exceptional — and a rate
+ * limit surfacing as a test failure says nothing about the node. `retry-after`
+ * is in seconds and is honoured when present.
+ */
+export async function api(method, path, body, attempt = 0) {
 	const response = await fetch(`${BASE_URL}${path}`, {
 		method,
 		headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body),
 	});
+
+	if (response.status === 429 && attempt < 4) {
+		const after = Number(response.headers.get('retry-after'));
+		const waitMs = Math.min(Number.isFinite(after) ? after * 1000 : 2000 * 2 ** attempt, 65000);
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
+		return await api(method, path, body, attempt + 1);
+	}
+
 	const text = await response.text();
 	if (!response.ok) throw new Error(`${method} ${path} → ${response.status}: ${text}`);
 	return text ? JSON.parse(text) : {};
@@ -107,7 +122,7 @@ export async function cleanUpRun() {
  */
 export async function requestFor(sourceId, marker) {
 	return await until(`a request containing "${marker}"`, async () => {
-		const { models = [] } = await api('GET', `/requests?source_id=${sourceId}&limit=10`);
+		const { models = [] } = await api('GET', `/requests?source_id=${sourceId}&limit=5`);
 		for (const candidate of models) {
 			const detail = await api('GET', `/requests/${candidate.id}`);
 			if (JSON.stringify(detail.data?.body ?? '').includes(marker)) return detail;
@@ -143,16 +158,25 @@ export async function until(label, check, { attempts = 40, delayMs = 1000 } = {}
  * asking for the node's work never silently gets the CLI's.
  */
 export async function connectionForSource(sourceName) {
-	const { models = [] } = await api('GET', '/connections?limit=250');
-	return models.find((c) => c.source?.name === sourceName && !c.name?.startsWith('cli-'));
+	return (await connectionsForSource(sourceName)).find((c) => !c.name?.startsWith('cli-'));
 }
 
 /** The `hookdeck listen` connection for a source. */
 export async function cliConnectionForSource(sourceName) {
-	return await until(`the CLI connection for ${sourceName}`, async () => {
-		const { models = [] } = await api('GET', '/connections?limit=250');
-		return models.find((c) => c.name === `cli-${sourceName}`);
-	});
+	return await until(`the CLI connection for ${sourceName}`, async () =>
+		(await connectionsForSource(sourceName)).find((c) => c.name === `cli-${sourceName}`),
+	);
+}
+
+/** Every connection hanging off a source, resolved by id rather than by listing. */
+async function connectionsForSource(sourceName) {
+	const { models: sources = [] } = await api(
+		'GET',
+		`/sources?name=${encodeURIComponent(sourceName)}`,
+	);
+	if (sources.length === 0) return [];
+	const { models = [] } = await api('GET', `/connections?source_id=${sources[0].id}`);
+	return models;
 }
 
 /** Post a payload to a Hookdeck ingest URL and report what the edge answered. */
@@ -167,7 +191,7 @@ export async function ingest(url, body, headers = {}) {
 
 /* ───────────────────────────── node contexts ─────────────────────────── */
 
-export async function liveHttpHelper(_credentialType, options) {
+export async function liveHttpHelper(_credentialType, options, attempt = 0) {
 	const url = new URL(options.url);
 	for (const [key, value] of Object.entries(options.qs ?? {})) {
 		if (value !== undefined && value !== '') url.searchParams.set(key, String(value));
@@ -177,8 +201,30 @@ export async function liveHttpHelper(_credentialType, options) {
 		headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
 		body: options.body === undefined ? undefined : JSON.stringify(options.body),
 	});
+
+	// The node's own transport, so it needs the same rate-limit handling as
+	// `api()`. Without it a 429 surfaces as whatever the node makes of a failed
+	// request, which is a test failing for the one reason it is not about.
+	if (response.status === 429 && attempt < 4) {
+		const after = Number(response.headers.get('retry-after'));
+		const waitMs = Math.min(Number.isFinite(after) ? after * 1000 : 2000 * 2 ** attempt, 65000);
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
+		return await liveHttpHelper(_credentialType, options, attempt + 1);
+	}
+
+	// n8n's helper hands back a body it could not parse rather than throwing, and
+	// Hookdeck answers some errors in plain text. Parsing strictly here would
+	// invent a failure mode the node never sees in production.
 	const text = await response.text();
-	const parsed = text ? JSON.parse(text) : '';
+	let parsed = '';
+	if (text) {
+		try {
+			parsed = JSON.parse(text);
+		} catch {
+			parsed = text;
+		}
+	}
+
 	if (options.returnFullResponse || options.ignoreHttpStatusErrors) {
 		return { statusCode: response.status, body: parsed };
 	}
@@ -192,9 +238,11 @@ export async function liveHttpHelper(_credentialType, options) {
 
 /** An IHookFunctions whose HTTP helper reaches the real API. */
 export function liveHookContext({ webhookUrl, staticData, params, mode = 'trigger' }) {
-	const logs = [];
+	// warn and info are the two levels the node uses for operator-facing setup
+	// guidance, and several tests assert on exactly what it said.
+	const warnings = [];
 	return {
-		logs,
+		warnings,
 		getWorkflowStaticData: () => staticData,
 		getNodeWebhookUrl: () => webhookUrl,
 		getMode: () => mode,
@@ -204,12 +252,18 @@ export function liveHookContext({ webhookUrl, staticData, params, mode = 'trigge
 		getInstanceId: () => `live${RUN_ID}`,
 		logger: {
 			debug() {},
-			info: (m) => logs.push(m),
-			warn: (m) => logs.push(m),
-			error: (m) => logs.push(m),
+			info: (m) => warnings.push(m),
+			warn: (m) => warnings.push(m),
+			error() {},
 		},
 		helpers: { httpRequestWithAuthentication: liveHttpHelper },
 	};
+}
+
+/** Whether a command is on PATH, for suites that shell out to a CLI. */
+export function hasCommand(name) {
+	const probe = spawnSync('command', ['-v', name], { shell: true, stdio: 'ignore' });
+	return probe.status === 0;
 }
 
 /** An IWebhookFunctions over a real inbound request. */
@@ -255,6 +309,7 @@ export function liveExecuteContext(params) {
 		continueOnFail: () => false,
 		getNode: () => ({ name: 'Hookdeck Event Gateway' }),
 		getNodeParameter: (name, _i, fallback) => (name in params ? params[name] : fallback),
+		logger: { debug() {}, info() {}, warn() {}, error() {} },
 		helpers: { httpRequestWithAuthentication: liveHttpHelper },
 	};
 }
@@ -325,10 +380,17 @@ export async function startCliReceiver(HookdeckEventGatewayTrigger, sourceName) 
 	// is an npm wrapper that spawns the platform binary as a child; signalling
 	// only the wrapper leaves that binary running, holding its CLI connection
 	// open and this process alive.
-	const cli = spawn('hookdeck', ['listen', String(port), sourceName, '--output', 'compact'], {
-		stdio: ['ignore', 'pipe', 'pipe'],
-		detached: true,
-	});
+	// --no-healthcheck: the retry test answers 503 on purpose, and a health check
+	// reads that as the origin being down and stops forwarding — which shows up
+	// as a retry that never arrives rather than as anything to do with the node.
+	const cli = spawn(
+		'hookdeck',
+		['listen', String(port), sourceName, '--output', 'compact', '--no-healthcheck'],
+		{
+			stdio: ['ignore', 'pipe', 'pipe'],
+			detached: true,
+		},
+	);
 	const ingestUrl = await new Promise((resolve, reject) => {
 		let buffer = '';
 		const onData = (chunk) => {
