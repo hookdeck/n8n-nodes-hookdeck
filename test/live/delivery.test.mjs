@@ -24,10 +24,16 @@ import {
 	ingest,
 	liveHookContext,
 	PREFIX,
-	skip,
+	hasCommand,
+	skip as noApiKey,
 	startCliReceiver,
 	until,
 } from './_harness.mjs';
+
+// Deliveries come back over `hookdeck listen`, so without the CLI this suite
+// cannot run at all. Skipping states why; spawning it anyway fails with ENOENT
+// and reads like the node is broken.
+const skip = noApiKey || (hasCommand('hookdeck') ? false : 'the Hookdeck CLI is not installed');
 
 /** Provision a source through the node's own `create()`. */
 async function provision(sourceName, params) {

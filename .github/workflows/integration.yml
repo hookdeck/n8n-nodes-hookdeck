@@ -1,10 +1,13 @@
 # Live tests against the Hookdeck API.
 #
-# The unit suite can prove the trigger *sends* `source_id` when a source already
-# exists, but not that Hookdeck leaves that source alone in response — and the
-# whole reason for binding by ID is that it does. Only the real API can settle
-# it, so this runs the node's own provisioning against a throwaway Event Gateway
-# project.
+# The unit suite drives the nodes against a stub, so it can prove what a node
+# sends but never what Hookdeck does with it. These suites settle that against
+# the real API, running the nodes' own provisioning and delivery handling.
+#
+# Suites needing a CLI skip here rather than failing: the delivery suite wants
+# the Hookdeck CLI and the Stripe suite wants an authenticated Stripe CLI,
+# neither of which this runner installs. What remains is everything reachable
+# with an API key alone.
 #
 # Requires a HOOKDECK_EG_API_KEY repository secret holding a project API key
 # (Project Settings → Secrets). Without it the job is skipped rather than
@@ -45,7 +48,7 @@ jobs:
       - name: Install dependencies
         run: 'npm ci'
 
-      - name: Run integration tests
-        run: 'npm run test:integration'
+      - name: Run live tests
+        run: 'npm run test:live'
         env:
           HOOKDECK_EG_API_KEY: ${{ secrets.HOOKDECK_EG_API_KEY }}
