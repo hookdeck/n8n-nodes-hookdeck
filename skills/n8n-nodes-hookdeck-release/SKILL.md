@@ -14,7 +14,7 @@ description: >-
 
 ## Canonical documentation
 
-Follow **[README.md](../../README.md) § Releasing** for the human steps. This
+Follow **[CONTRIBUTING.md](../../CONTRIBUTING.md) § Releasing** for the human steps. This
 skill adds **how automation works**, **what counts as breaking for an n8n node**,
 and a **research loop** for drafting notes.
 
@@ -245,7 +245,7 @@ or an exceptionally large contribution. No generic thanks block.
 
 | Topic | Location |
 | --- | --- |
-| Human steps | [README.md § Releasing](../../README.md) |
+| Human steps | [CONTRIBUTING.md § Releasing](../../CONTRIBUTING.md) |
 | Publish workflow | [.github/workflows/publish.yml](../../.github/workflows/publish.yml) |
 | CI | [.github/workflows/ci.yml](../../.github/workflows/ci.yml) |
 | Live API tests | [.github/workflows/integration.yml](../../.github/workflows/integration.yml) |

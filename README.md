@@ -4,6 +4,17 @@ n8n community nodes for [Hookdeck](https://hookdeck.com), the event gateway
 that receives, verifies, queues, and delivers webhooks, so your workflows
 don't have to care whether n8n was up when the event arrived.
 
+![A workflow in the n8n editor: a Stripe payment_intent.succeeded event arriving
+through the Hookdeck Event Gateway Trigger, taking the false branch of an IF
+node named "Final attempt?" to Process order, with the trigger's output panel
+showing body, headers, query and the hookdeck delivery
+metadata](docs/images/dead-letter-workflow.png)
+
+*A dead-letter branch routing on `hookdeck.isLastAttempt`, one of the
+[example workflows](#example-workflows) below. The `hookdeck` object in the
+trigger's output is delivery metadata n8n's built-in Webhook node has no way to
+supply.*
+
 [n8n](https://n8n.io) is a [fair-code licensed](https://docs.n8n.io/reference/license/)
 workflow automation platform. Its built-in Webhook trigger hands your provider
 a URL that leads straight to your instance, which means a restart, a deploy,
@@ -58,6 +69,11 @@ and use the package name `@hookdeck/n8n-nodes-hookdeck`.
 
 You'll also need a [Hookdeck account](https://dashboard.hookdeck.com/signup);
 the free tier is enough to run real workflows on.
+
+**Self-hosted n8n today.** n8n Cloud installs only community nodes on n8n's
+[verified list](https://docs.n8n.io/integrations/community-nodes/installation/verified-install/),
+and this package is not on it yet — the submission is pending. Self-hosted
+instances can install any community package, so that is where it runs for now.
 
 ## Documentation
 
@@ -282,10 +298,21 @@ Each execution receives one item:
     "willRetryAfter": "60",
     "isLastAttempt": false,
     "sourceName": "stripe-production",
+    "connectionName": "n8n-my-workflow",
+    "destinationName": "n8n-my-workflow",
+    "verified": "true",
+    "originalIp": "203.0.113.10",
+    "eventUrl": "https://dashboard.hookdeck.com/events/evt_...",
     "idempotencyKey": "evt_..."
   }
 }
 ```
+
+Every field under `hookdeck` except `isLastAttempt` is read from a delivery
+header and is absent if Hookdeck did not send it, so treat them as optional.
+`verified` is a string, not a boolean — it reports whether Hookdeck verified the
+*provider's* signature at ingest, which is separate from the Hookdeck-to-n8n
+signature the trigger checks itself.
 
 `hookdeck.isLastAttempt` is `true` when Hookdeck will not retry the event again
 automatically — the natural condition for a dead-letter branch.
@@ -345,8 +372,9 @@ you would rather make it there first.
 
 To get the URL onto your clipboard, either use the link beside a listed source,
 which opens it in the Hookdeck dashboard where there is a copy button, or run
-the **Hookdeck Event Gateway** node with **Source → Create** or **Source → Get
-URL**, both of which return the URL as workflow data with copy-on-hover. (The link deliberately does not point at
+the **Hookdeck Event Gateway** node with **Source → Get or Create** or
+**Source → Get URL**, both of which return the URL as workflow data with
+copy-on-hover. (The link deliberately does not point at
 the source URL itself: that endpoint rejects browser `GET` requests with `405`,
 and aiming a link at your own ingest endpoint invites firing requests at it by
 accident.)
@@ -436,15 +464,10 @@ delivery metadata only a gateway can supply. See
 [`examples/README.md`](examples/README.md) for how each behaves and what was
 observed running them.
 
-![The dead-letter example running: a Stripe payment_intent.succeeded event
-arriving through Hookdeck, taking the false branch of "Final attempt?" to
-Process order, with the trigger's output showing body, headers, query and the
-hookdeck metadata](docs/images/dead-letter-workflow.png)
-
-The `hookdeck` column is the part n8n's own Webhook node cannot give you:
-`isLastAttempt` is what the IF branches on, `idempotencyKey` is what the other
-example deduplicates on, and `eventUrl` links straight to that delivery in the
-Hookdeck dashboard.
+The screenshot at the top of this README is the dead-letter example mid-run.
+`isLastAttempt` is what its IF node branches on, `idempotencyKey` is what the
+other example deduplicates on, and `eventUrl` links straight to that delivery in
+the Hookdeck dashboard.
 
 ### Hookdeck Event Gateway node
 
@@ -489,163 +512,10 @@ then delivered on reactivation.
 It targets `n8nNodesApiVersion: 1`, which n8n 1.x also supports, but only 2.x has
 been tested — if you run 1.x, treat it as unverified rather than assumed working.
 
-## Development
+## Contributing
 
-### Layout
-
-```
-credentials/
-  HookdeckEventGatewayApi.credentials.ts API key credential and its test request
-nodes/Hookdeck/
-  HookdeckEventGatewayTrigger.node.ts    trigger: provisioning lifecycle + delivery handling
-  HookdeckEventGateway.node.ts           action node: resource/operation dispatch
-  descriptions/
-    TriggerProperties.ts                 trigger UI
-    ActionProperties.ts                  action node UI
-  ConnectionPayload.ts                   what we ask Hookdeck to provision
-  Registration.ts                        what the trigger persists between activations
-  Delivery.ts                            verifying and describing an inbound delivery
-  Naming.ts                              Hookdeck naming rules, reachability checks
-  GenericFunctions.ts                    HTTP transport, error mapping, pagination
-  SourceTypes.ts                         generated source-type list (do not hand-edit)
-```
-
-The UI definitions live apart from the nodes because they are long and rarely
-the thing you are reading the code for. `Delivery.ts` and `Naming.ts` are free
-of n8n imports on purpose — they encode Hookdeck's rules rather than n8n's, and
-are shared with the Hookdeck plugins for other hosts.
-
-### Commands
-
-```bash
-npm install
-npm run build
-npm test          # builds, then runs the unit suite with node:test
-npm run lint      # n8n's community-node rules
-npm run scan      # the same checks n8n runs when reviewing for verification
-npm run verify:load  # loads the built package the way n8n loads it
-
-HOOKDECK_EG_API_KEY=... npm run test:integration   # live tests against the API
-
-npm run generate:source-types   # rewrite SourceTypes.ts from Hookdeck's OpenAPI spec
-npm run check:source-types      # fail if it has drifted from the spec
-```
-
-`SourceTypes.ts` is generated, so the ~150 platform types and their auth shapes
-are never hand-maintained. A scheduled workflow runs `check:source-types` weekly
-rather than blocking every pull request, because the spec is a live third-party
-document and a Hookdeck release would otherwise fail unrelated CI.
-
-The integration suite is skipped unless `HOOKDECK_EG_API_KEY` is set, so the
-default `npm test` needs no credentials. It creates and deletes real sources,
-destinations and connections — point it at a throwaway Event Gateway project,
-never one carrying live traffic. In CI it runs from a repository secret of the
-same name, and is skipped for pull requests from forks, which cannot read it.
-
-`npm run scan` is the one that matters before submitting: it runs
-`@n8n/scan-community-package` against this working tree, with inline
-`eslint-disable` comments ignored exactly as the real review does.
-
-To try the nodes in a real n8n:
-
-```bash
-npm link
-mkdir -p ~/.n8n/custom && cd ~/.n8n/custom && npm init -y && npm link @hookdeck/n8n-nodes-hookdeck
-```
-
-Then start n8n with `./scripts/run-n8n.sh`. n8n needs Node 22.22 or newer — the
-script checks and refuses otherwise. If your default is older, install one
-(`asdf install nodejs 22.23.2`) and point `NODE_BIN` at it rather than changing
-the machine default.
-
-No tunnel is needed. Publish the workflow; the node sees that Hookdeck cannot
-reach this n8n, provisions a CLI destination, and writes the commands to run to
-its server log:
-
-```bash
-hookdeck ci --api-key <your Event Gateway project API key>
-hookdeck listen 5678 <source> <connection> --device-name n8n-<host>-<instance>
-```
-
-A tunnel still works if you prefer one — set `WEBHOOK_URL` to the public address
-before starting n8n and the node provisions an HTTP destination instead. See
-[How events reach n8n](#how-events-reach-n8n) for what differs between the two.
-
-## Releasing
-
-Publishing is driven by a **GitHub Release**, not by a tag push and never from a
-laptop. n8n requires community nodes to be published from GitHub Actions with an
-npm provenance statement, so the publish has to happen in CI.
-
-1. Land everything through PRs, including promoting `## [Unreleased]` in
-   [CHANGELOG.md](CHANGELOG.md) to the new version with a date.
-2. Check `main` is green.
-3. Draft the release notes. Write them for someone running a workflow: what
-   changes for them, and whether they have to do anything.
-4. Create the release against `main`, tagged `vMAJOR.MINOR.PATCH`:
-
-   ```bash
-   gh release create v0.2.0 --target main --title v0.2.0 --notes-file notes.md
-   ```
-
-   Or use the GitHub UI — Releases → Draft a new release.
-
-Publishing then happens automatically:
-[`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
-version from it, re-runs lint, the verification scan, the build, the load check
-and the unit tests, and publishes with provenance. A release marked
-**pre-release** publishes under the `beta` dist-tag instead of `latest`.
-
-There is no release commit — the tag is the version, and `package.json` in git
-is not bumped to match.
-
-### Bootstrapping the package (once, already done after the first release)
-
-npm configures trusted publishers on a package that already exists, so a package
-that has never been published cannot use OIDC for its first publish. The name is
-claimed by hand once, and everything anyone installs is published from CI with
-provenance.
-
-```bash
-npm login
-RELEASE_MODE=true npm publish --access public   # claims the name at 0.0.1
-npm deprecate @hookdeck/n8n-nodes-hookdeck@0.0.1 \
-  "Placeholder to claim the package name. Use 0.1.0 or later."
-```
-
-`RELEASE_MODE` is needed because `prepublishOnly` runs a guard that blocks
-publishing by hand — this is the one sanctioned exception to it.
-
-Then on npmjs.com: the package → Settings → Trusted Publishers → Add a publisher
-→ GitHub Actions, owner `hookdeck`, repository `n8n-nodes-hookdeck`, workflow
-`publish.yml`, environment blank, allowed action `npm publish`. Environment must
-be blank because `publish.yml` declares no `environment:`, and npm matches the
-OIDC claim exactly.
-
-No `NPM_TOKEN` secret is needed and none should be added. npm finds the trusted
-publisher itself and exchanges the Actions OIDC token during publish; a token in
-`.npmrc` takes precedence over OIDC, so a stale or empty secret quietly becomes
-the publishing identity, or fails the publish.
-
-That throwaway `0.0.1` is the only version ever published without provenance,
-and it is deprecated the moment it exists. `0.1.0` onwards go through
-`publish.yml`.
-
-### Choosing the version
-
-SemVer here is about the contract with a **saved workflow**. n8n records the node
-type, the credential type and every parameter name inside the user's workflow
-JSON, so renaming any of them detaches existing workflows without failing a
-build. That is a MAJOR change, whatever it looks like in the diff.
-
-| Change | Bump |
-| --- | --- |
-| Renamed or removed node type, credential type, parameter, resource or operation; changed output item shape; a default that alters delivery behaviour | MAJOR |
-| New resource, operation or option; additive output fields; new source types | MINOR |
-| Fixes, wording, icons, tests, CI, dependency bumps | PATCH |
-
-Agents: [`skills/n8n-nodes-hookdeck-release`](skills/n8n-nodes-hookdeck-release/SKILL.md)
-carries the full checklist, the gates and a notes template.
+Building the nodes, running the tests, trying them in a real n8n, and the
+release process are in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Resources
 
