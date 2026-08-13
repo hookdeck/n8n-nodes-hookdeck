@@ -498,16 +498,22 @@ test('live API surface', { skip, concurrency: false }, async (t) => {
 			assert.match(error.message, /HTTP 4\d\d/, `Cancel failed unexpectedly: ${error.message}`);
 		});
 
-		const requests = await new HookdeckEventGateway().execute.call(
-			liveExecuteContext({
-				resource: 'request',
-				operation: 'getAll',
-				returnAll: false,
-				limit: 1,
-				filters: { source_id: connection.source.id },
-			}),
-		);
-		assert.equal(requests[0].length, 1, 'the original request was not retrievable');
+		// Polled: the request record is not queryable the instant the edge accepts
+		// the event, and a single read makes that latency look like a missing
+		// record.
+		const requests = await until('the original request to be queryable', async () => {
+			const found = await new HookdeckEventGateway().execute.call(
+				liveExecuteContext({
+					resource: 'request',
+					operation: 'getAll',
+					returnAll: false,
+					limit: 1,
+					filters: { source_id: connection.source.id },
+				}),
+			);
+			return found[0].length === 1 ? found[0] : null;
+		});
+		assert.equal(requests.length, 1, 'the original request was not retrievable');
 
 		const attempts = await new HookdeckEventGateway().execute.call(
 			liveExecuteContext({

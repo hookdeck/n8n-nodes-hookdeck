@@ -26,13 +26,28 @@ export const skip = API_KEY ? false : 'HOOKDECK_EG_API_KEY is not set';
 export const RUN_ID = randomBytes(4).toString('hex');
 export const PREFIX = `n8n-live-${RUN_ID}`;
 
-/** Call the Hookdeck API directly, to arrange fixtures and assert real state. */
-export async function api(method, path, body) {
+/**
+ * Call the Hookdeck API directly, to arrange fixtures and assert real state.
+ *
+ * Retries on 429. The project allows 240 requests a minute and these suites run
+ * back to back, so a burst is expected rather than exceptional — and a rate
+ * limit surfacing as a test failure says nothing about the node. `retry-after`
+ * is in seconds and is honoured when present.
+ */
+export async function api(method, path, body, attempt = 0) {
 	const response = await fetch(`${BASE_URL}${path}`, {
 		method,
 		headers: { Authorization: `Bearer ${API_KEY}`, 'Content-Type': 'application/json' },
 		body: body === undefined ? undefined : JSON.stringify(body),
 	});
+
+	if (response.status === 429 && attempt < 4) {
+		const after = Number(response.headers.get('retry-after'));
+		const waitMs = Math.min(Number.isFinite(after) ? after * 1000 : 2000 * 2 ** attempt, 65000);
+		await new Promise((resolve) => setTimeout(resolve, waitMs));
+		return await api(method, path, body, attempt + 1);
+	}
+
 	const text = await response.text();
 	if (!response.ok) throw new Error(`${method} ${path} → ${response.status}: ${text}`);
 	return text ? JSON.parse(text) : {};
@@ -107,7 +122,7 @@ export async function cleanUpRun() {
  */
 export async function requestFor(sourceId, marker) {
 	return await until(`a request containing "${marker}"`, async () => {
-		const { models = [] } = await api('GET', `/requests?source_id=${sourceId}&limit=10`);
+		const { models = [] } = await api('GET', `/requests?source_id=${sourceId}&limit=5`);
 		for (const candidate of models) {
 			const detail = await api('GET', `/requests/${candidate.id}`);
 			if (JSON.stringify(detail.data?.body ?? '').includes(marker)) return detail;
@@ -143,16 +158,25 @@ export async function until(label, check, { attempts = 40, delayMs = 1000 } = {}
  * asking for the node's work never silently gets the CLI's.
  */
 export async function connectionForSource(sourceName) {
-	const { models = [] } = await api('GET', '/connections?limit=250');
-	return models.find((c) => c.source?.name === sourceName && !c.name?.startsWith('cli-'));
+	return (await connectionsForSource(sourceName)).find((c) => !c.name?.startsWith('cli-'));
 }
 
 /** The `hookdeck listen` connection for a source. */
 export async function cliConnectionForSource(sourceName) {
-	return await until(`the CLI connection for ${sourceName}`, async () => {
-		const { models = [] } = await api('GET', '/connections?limit=250');
-		return models.find((c) => c.name === `cli-${sourceName}`);
-	});
+	return await until(`the CLI connection for ${sourceName}`, async () =>
+		(await connectionsForSource(sourceName)).find((c) => c.name === `cli-${sourceName}`),
+	);
+}
+
+/** Every connection hanging off a source, resolved by id rather than by listing. */
+async function connectionsForSource(sourceName) {
+	const { models: sources = [] } = await api(
+		'GET',
+		`/sources?name=${encodeURIComponent(sourceName)}`,
+	);
+	if (sources.length === 0) return [];
+	const { models = [] } = await api('GET', `/connections?source_id=${sources[0].id}`);
+	return models;
 }
 
 /** Post a payload to a Hookdeck ingest URL and report what the edge answered. */
@@ -334,10 +358,17 @@ export async function startCliReceiver(HookdeckEventGatewayTrigger, sourceName) 
 	// is an npm wrapper that spawns the platform binary as a child; signalling
 	// only the wrapper leaves that binary running, holding its CLI connection
 	// open and this process alive.
-	const cli = spawn('hookdeck', ['listen', String(port), sourceName, '--output', 'compact'], {
-		stdio: ['ignore', 'pipe', 'pipe'],
-		detached: true,
-	});
+	// --no-healthcheck: the retry test answers 503 on purpose, and a health check
+	// reads that as the origin being down and stops forwarding — which shows up
+	// as a retry that never arrives rather than as anything to do with the node.
+	const cli = spawn(
+		'hookdeck',
+		['listen', String(port), sourceName, '--output', 'compact', '--no-healthcheck'],
+		{
+			stdio: ['ignore', 'pipe', 'pipe'],
+			detached: true,
+		},
+	);
 	const ingestUrl = await new Promise((resolve, reject) => {
 		let buffer = '';
 		const onData = (chunk) => {
