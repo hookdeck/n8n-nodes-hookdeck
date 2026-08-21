@@ -165,17 +165,11 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		},
 		inputs: [],
 		outputs: [NodeConnectionTypes.Main],
-		// Set because n8n requires it: `node-usable-as-tool` is an error in both
-		// the community-node lint rules and the verification scanner, and the
-		// scanner ignores inline disables — so omitting it fails verification.
-		//
-		// It is not, however, harmless. On n8n 2.34.4 this produces a companion
-		// `hookdeckEventGatewayTriggerTool` node type with an `ai_tool` output,
-		// filed under the AI category, which an agent can select and call.
-		// Calling a trigger as a tool does nothing useful — its job is to receive
-		// a delivery from Hookdeck, not to be invoked — so the entry is noise at
-		// best. There is no way to opt a trigger out and still pass the scan.
-		usableAsTool: true,
+		// No `usableAsTool` here, deliberately. n8n turns a node that sets it into a
+		// companion `…Tool` node type in the AI tool picker, and a trigger cannot be
+		// called — it waits for a delivery. `node-usable-as-tool` treats setting it on a
+		// trigger as an error and does not ask for it to be `false`. The action node
+		// sets it, and should.
 		credentials: [
 			{
 				name: 'hookdeckEventGatewayApi',

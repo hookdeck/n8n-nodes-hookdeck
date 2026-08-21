@@ -6,6 +6,35 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- The **Hookdeck Event Gateway Trigger** no longer appears in an AI Agent's tool
+  list. It was never usable there — a trigger waits for Hookdeck to deliver an
+  event, so an agent that picked it got a tool that could not be called — but
+  n8n generated a `Hookdeck Event Gateway Trigger Tool` entry alongside it
+  anyway, and an agent with a long tool list could waste a turn on it. Nothing
+  to do: existing workflows keep working, and the trigger itself is unchanged.
+
+  The **Hookdeck Event Gateway** action node is still usable as a tool, which is
+  the one you want an agent calling — it lists and counts events, reads issues
+  and returns a source's URL.
+
+  Formally this removes the `hookdeckEventGatewayTriggerTool` node type, which
+  the versioning table in [CONTRIBUTING.md](CONTRIBUTING.md) calls MAJOR. Nobody
+  can have a working workflow that depends on it, so it is being treated as a
+  MINOR change; before 1.0.0 both are `0.2.0` regardless, so the distinction
+  costs nothing either way. If you did somehow wire that tool into an agent, it
+  will show as an unrecognised node and can be deleted.
+
+### Changed
+
+- Development only, no effect on a published workflow:
+  `@n8n/scan-community-package` `0.31.0` → `0.32.0` and `@n8n/node-cli`
+  `0.42.2` → `0.44.5`. The scanner in `0.32.0` is what reports the trigger's AI
+  tool entry as an error; on `0.31.0` it was required instead, and a caret range
+  on a `0.x` version could not reach the new minor, so `npm run scan` kept
+  passing against the older rule.
+
 ## [0.1.0] - 2026-08-12
 
 First release. `0.0.1` was a placeholder published by hand to claim the package

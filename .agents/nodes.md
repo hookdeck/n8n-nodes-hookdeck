@@ -75,6 +75,13 @@ description: INodeTypeDescription = {
     agent.
   - Set to `false` or omit this if node works heavily with **binary
     data** which tools don't support
+  - **Omit it entirely on trigger nodes.** A trigger waits for an event; it
+    cannot be invoked, so n8n's `node-usable-as-tool` rule reports
+    `usableAsTool: true` on one as an **error** and the verification scan
+    fails. A node counts as a trigger if `group` includes `'trigger'` or its
+    class name ends with `Trigger`. The same applies to AI-only nodes — no
+    inputs and a non-`main` output. This bullet is a local addition —
+    `@n8n/node-cli`'s copy of this file does not mention the exception yet.
 - `properties` define the UI parameters
   - Use the convention: first a **"Resource"** parameter and for each resource an **"Operation"** parameter.
   - You can choose to not follow this convention **ONLY if it's not

@@ -42,7 +42,7 @@ npm run lint      # n8n's community-node rules
 npm run scan      # the same checks n8n runs when reviewing for verification
 npm run verify:load  # loads the built package the way n8n loads it
 
-HOOKDECK_EG_API_KEY=... npm run test:integration   # live tests against the API
+HOOKDECK_EG_API_KEY=... npm run test:live          # live tests against the API
 
 npm run generate:source-types   # rewrite SourceTypes.ts from Hookdeck's OpenAPI spec
 npm run check:source-types      # fail if it has drifted from the spec
