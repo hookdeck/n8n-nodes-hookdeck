@@ -167,9 +167,9 @@ export class HookdeckEventGatewayTrigger implements INodeType {
 		outputs: [NodeConnectionTypes.Main],
 		// No `usableAsTool` here, deliberately. n8n turns a node that sets it into a
 		// companion `…Tool` node type in the AI tool picker, and a trigger cannot be
-		// called — it waits for a delivery. `node-usable-as-tool` treats setting it on a
-		// trigger as an error and does not ask for it to be `false`. The action node
-		// sets it, and should.
+		// called — it waits for a delivery. `node-usable-as-tool` reports
+		// `usableAsTool: true` on a trigger as an error, and no longer asks a trigger
+		// for the property at all. The action node sets it, and should.
 		credentials: [
 			{
 				name: 'hookdeckEventGatewayApi',

@@ -73,8 +73,9 @@ description: INodeTypeDescription = {
 - `usableAsTool`
   - Set to `true` to allow n8n to use this node as a tool for the AI
     agent.
-  - Set to `false` or omit this if node works heavily with **binary
-    data** which tools don't support
+  - Omit this if the node works heavily with **binary data**, which tools
+    don't support. (Upstream says "set to `false`"; `n8n-workflow` types the
+    property `true | UsableAsToolDescription`, so `false` does not typecheck.)
   - **Omit it entirely on trigger nodes.** A trigger waits for an event; it
     cannot be invoked, so n8n's `node-usable-as-tool` rule reports
     `usableAsTool: true` on one as an **error** and the verification scan

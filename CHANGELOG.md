@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-08-21
+
+### Changed
+
+- Development only, no effect on a published workflow:
+  `@n8n/scan-community-package` `0.31.0` → `0.32.0` and `@n8n/node-cli`
+  `0.42.2` → `0.44.5`. The scanner in `0.32.0` is what reports the trigger's AI
+  tool entry as an error; on `0.31.0` it was required instead, and a caret range
+  on a `0.x` version could not reach the new minor, so `npm run scan` kept
+  passing against the older rule.
+
 ### Removed
 
 - The **Hookdeck Event Gateway Trigger** no longer appears in an AI Agent's tool
@@ -19,21 +30,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   the one you want an agent calling — it lists and counts events, reads issues
   and returns a source's URL.
 
-  Formally this removes the `hookdeckEventGatewayTriggerTool` node type, which
-  the versioning table in [CONTRIBUTING.md](CONTRIBUTING.md) calls MAJOR. Nobody
-  can have a working workflow that depends on it, so it is being treated as a
-  MINOR change; before 1.0.0 both are `0.2.0` regardless, so the distinction
-  costs nothing either way. If you did somehow wire that tool into an agent, it
-  will show as an unrecognised node and can be deleted.
-
-### Changed
-
-- Development only, no effect on a published workflow:
-  `@n8n/scan-community-package` `0.31.0` → `0.32.0` and `@n8n/node-cli`
-  `0.42.2` → `0.44.5`. The scanner in `0.32.0` is what reports the trigger's AI
-  tool entry as an error; on `0.31.0` it was required instead, and a caret range
-  on a `0.x` version could not reach the new minor, so `npm run scan` kept
-  passing against the older rule.
+  This removes the generated `hookdeckEventGatewayTriggerTool` node type. That
+  is normally a MAJOR change, but no working workflow can depend on a tool that
+  could never be called. If you did wire it into an agent, it will show as an
+  unrecognised node and can be deleted.
 
 ## [0.1.0] - 2026-08-12
 
@@ -176,5 +176,6 @@ name so trusted publishing could be configured, and is deprecated.
   The token step that expression guarded is gone entirely: npm exchanges the
   Actions OIDC token itself, so there was nothing for it to do.
 
-[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hookdeck/n8n-nodes-hookdeck/releases/tag/v0.1.0
