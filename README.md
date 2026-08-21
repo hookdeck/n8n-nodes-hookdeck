@@ -503,7 +503,7 @@ fact.
 ### Compatibility
 
 Built against Hookdeck API version `2025-07-01`, and verified end to end on n8n
-**2.34.4** with Node.js 22.23.2: package loaded from `N8N_CUSTOM_EXTENSIONS`,
+**2.35.7** with Node.js 22.23.2: package loaded from `N8N_CUSTOM_EXTENSIONS`,
 credential created and its test passing, workflow activated, a live event sent
 through the source URL and received by the workflow with its signature verified,
 forged requests rejected with `401`, and an event sent while deactivated held and

@@ -547,6 +547,33 @@ test('trigger has no main input, so it can only start a workflow', () => {
 });
 
 /**
+ * `usableAsTool` decides whether n8n generates a companion `…Tool` node type,
+ * and the two nodes want opposite answers. Neither answer is visible in a build
+ * or a delivery test: adding it back to the trigger fails n8n's verification
+ * scan (`node-usable-as-tool`), and dropping it from the action node silently
+ * removes it from every AI Agent's tool picker. Both are one-word edits.
+ *
+ * Absence is asserted with `in` rather than `=== undefined` because that is
+ * stricter than the linter. The rule only reports the literal `true`, but n8n
+ * generates the tool variant for anything truthy — so `usableAsTool: {
+ * replacements: … }` would pass the scan and still add the entry.
+ */
+test('only the action node offers itself as an AI tool', () => {
+	const trigger = new HookdeckEventGatewayTrigger().description;
+	assert.equal(
+		'usableAsTool' in trigger,
+		false,
+		'trigger must not carry usableAsTool in any form — n8n generates the tool variant for any truthy value',
+	);
+
+	assert.equal(
+		new HookdeckEventGateway().description.usableAsTool,
+		true,
+		'action node must stay usableAsTool — dropping it removes it from every agent tool picker',
+	);
+});
+
+/**
  * Minimal stand-in for n8n's IHookFunctions, enough to drive the webhook
  * lifecycle. `calls` records every Hookdeck request so a test can assert which
  * connection a pause or delete actually targeted.
