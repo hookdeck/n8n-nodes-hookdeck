@@ -1766,6 +1766,73 @@ test('an exact count comes from the count endpoint, never a list', async () => {
 	}
 });
 
+test('Source > Get or Create builds verification from the fields, not just JSON', async () => {
+	// Parity with the trigger. Before these fields were shared, creating a
+	// verified Stripe source from the action node meant hand-writing
+	// {"auth_type":"STRIPE","auth":{"webhook_secret_key":"..."}} into the JSON
+	// escape hatch, while the trigger had a labelled field for it.
+	const { calls } = await runAction(
+		{
+			resource: 'source',
+			operation: 'getOrCreate',
+			sourceName: 'stripe',
+			sourceType: 'STRIPE',
+			platformSecret: 'whsec_123',
+			sourceConfigJson: '',
+		},
+		{ models: [], pagination: {} },
+	);
+
+	const create = calls.find((c) => c.method === 'POST');
+	assert.equal(create.body.type, 'STRIPE');
+	assert.deepEqual(create.body.config, {
+		auth_type: 'STRIPE',
+		auth: { webhook_secret_key: 'whsec_123' },
+	});
+});
+
+test('Source > Get or Create still honours the JSON escape hatch, last', async () => {
+	const { calls } = await runAction(
+		{
+			resource: 'source',
+			operation: 'getOrCreate',
+			sourceName: 'odd',
+			sourceType: 'WEBHOOK',
+			verification: 'HMAC',
+			hmacSecret: 'shh',
+			hmacHeaderKey: 'x-sig',
+			hmacAlgorithm: 'sha256',
+			hmacEncoding: 'hex',
+			sourceConfigJson: '{"auth_type":"CUSTOM_SIGNATURE"}',
+		},
+		{ models: [], pagination: {} },
+	);
+
+	const create = calls.find((c) => c.method === 'POST');
+	// JSON wins over the fields, same precedence the trigger uses.
+	assert.equal(create.body.config.auth_type, 'CUSTOM_SIGNATURE');
+	assert.equal(create.body.config.auth.header_key, 'x-sig');
+});
+
+test('Source > Get or Create omits config entirely when nothing is configured', async () => {
+	// An empty object is not the same as absent: sending `config: {}` would ask
+	// Hookdeck to blank the source's config.
+	const { calls } = await runAction(
+		{
+			resource: 'source',
+			operation: 'getOrCreate',
+			sourceName: 'plain',
+			sourceType: 'WEBHOOK',
+			verification: 'none',
+			sourceConfigJson: '',
+		},
+		{ models: [], pagination: {} },
+	);
+
+	const create = calls.find((c) => c.method === 'POST');
+	assert.equal('config' in create.body, false);
+});
+
 test('action node rejects an unknown resource', async () => {
 	await assert.rejects(
 		() => runAction({ resource: 'nonsense', operation: 'get', id: 'x' }),
