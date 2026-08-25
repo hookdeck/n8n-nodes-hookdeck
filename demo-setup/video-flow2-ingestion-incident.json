@@ -1,0 +1,204 @@
+{
+  "name": "Demo 2 — Ingestion incident",
+  "nodes": [
+    {
+      "parameters": {
+        "source": {
+          "__rl": true,
+          "value": "demo-issues",
+          "mode": "name"
+        },
+        "sourceType": "WEBHOOK",
+        "verification": "none",
+        "ackMode": "async_retry",
+        "options": {}
+      },
+      "id": "b2000000-0000-4000-8000-000000000001",
+      "name": "Hookdeck Event Gateway Trigger",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "ff4d2779-6dee-4d07-b869-1dbda34f1cb6"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=A Hookdeck delivery issue has just opened.\n\nissue_id: {{ $json.body.issue.id }}\nconnection_id: {{ $json.body.issue.aggregation_keys.webhook_id[0] }}\nconnection_name: {{ $json.body.trigger_webhook.full_name }}\ndestination_id: {{ $json.body.issue.data.trigger_event.destination_id }}\nsource_id: {{ $json.body.issue.data.trigger_event.source_id }}\nerror_code: {{ $json.body.issue.data.trigger_attempt.error_code }}\nresponse_status: {{ $json.body.issue.data.trigger_attempt.response_status }}\nfailing_event_id: {{ $json.body.issue.reference.event_id }}\n\nInvestigate and remediate.",
+        "options": {
+          "systemMessage": "You are an on-call engineer for a webhook ingestion pipeline built on Hookdeck.\n\nA delivery issue has opened: an event failed to reach its destination. Hookdeck will keep retrying on a schedule, so a destination that is returning 5xx will accumulate retries against a system that is already broken. Your job is to establish the facts, stop the retries, and report.\n\nDo this, in order:\n\n1. Call \"Get issue\" with the issue_id to confirm the issue is still OPENED and read the response status.\n2. Call \"List failed events\" with the destination_id and status FAILED to see how many events are currently affected. You must look this up — it is not in what you were given.\n3. Call \"Pause connection\" with the connection_id. Pausing holds queued events rather than dropping them, so it is safe and reversible; it stops retries piling up against a destination that is returning errors. Do this whenever the destination is returning 5xx, however many events are affected so far — one failing event today is five retries over the next five minutes.\n\nThen reply with a short incident note for a human, in plain text, no markdown:\n- what broke, naming the connection\n- how many events are affected right now, and the response status\n- that you paused the connection, and that queued events are held not lost\n- what a human should check next\n\nBe concise. Six lines at most. Every figure must come from a tool result — do not invent numbers."
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000002",
+      "name": "On-call agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        280,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001",
+          "cachedResultName": "Claude Haiku 4.5"
+        },
+        "options": {
+          "maxTokensToSample": 1024,
+          "temperature": 0
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000003",
+      "name": "Claude Haiku 4.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        140,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Get the current state of a Hookdeck delivery issue by its ID. Use this first to confirm the issue is still open.",
+        "resource": "issue",
+        "operation": "get",
+        "id": "={{ $fromAI('issue_id', 'The Hookdeck issue ID, looks like iss_XXXX', 'string') }}"
+      },
+      "id": "b2000000-0000-4000-8000-000000000004",
+      "name": "Get issue",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        380,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "List events in Hookdeck, filtered by destination and status. Use this to count how many events are currently failing on a destination — the blast radius.",
+        "resource": "event",
+        "operation": "getAll",
+        "returnAll": false,
+        "limit": 20,
+        "filters": {
+          "status": "FAILED",
+          "destination_id": "={{ $fromAI('destination_id', 'The Hookdeck destination ID to filter events by, looks like des_XXXX', 'string') }}"
+        }
+      },
+      "id": "b2000000-0000-4000-8000-000000000005",
+      "name": "List failed events",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        560,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Pause a Hookdeck connection so it stops attempting deliveries. Queued events are held, not lost. Use only when a destination is broken for more than one event.",
+        "resource": "connection",
+        "operation": "pause",
+        "id": "={{ $fromAI('connection_id', 'The Hookdeck connection ID to pause, looks like web_XXXX', 'string') }}"
+      },
+      "id": "b2000000-0000-4000-8000-000000000006",
+      "name": "Pause connection",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        740,
+        240
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "b2000000-0000-4000-8000-000000000007",
+      "name": "Notify on-call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        620,
+        0
+      ]
+    }
+  ],
+  "connections": {
+    "Hookdeck Event Gateway Trigger": {
+      "main": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On-call agent": {
+      "main": [
+        [
+          {
+            "node": "Notify on-call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Haiku 4.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List failed events": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause connection": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

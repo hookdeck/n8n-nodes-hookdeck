@@ -1,0 +1,243 @@
+{
+  "topic": "issue.opened",
+  "issue": {
+    "id": "iss_Wxi2c14LglYcuYY9w7",
+    "team_id": "tm_f5boKAPUgdvT",
+    "type": "delivery",
+    "status": "OPENED",
+    "aggregation_keys": {
+      "error_code": [
+        "CONNECTION_RESET"
+      ],
+      "webhook_id": [
+        "web_PnoShqBgs3Ob"
+      ],
+      "response_status": []
+    },
+    "reference": {
+      "event_id": "evt_KG4GnPM0MvHqeQRppG",
+      "attempt_id": "atm_Z0e3cGW8tNt20PwHqcko",
+      "attempt_body": {}
+    },
+    "last_updated_by": null,
+    "merged_with": null,
+    "first_seen_at": "2026-08-21T19:59:35.907Z",
+    "last_seen_at": "2026-08-21T19:59:35.907Z",
+    "dismissed_at": null,
+    "opened_at": "2026-08-21T19:59:35.907Z",
+    "updated_at": "2026-08-21T19:59:35.907Z",
+    "created_at": "2026-08-21T19:59:35.907Z",
+    "issue_trigger_id": "it_6ewxqCxQnQjfLn",
+    "auto_resolved_at": null,
+    "data": {
+      "trigger_event": {
+        "webhook_id": "web_PnoShqBgs3Ob",
+        "team_id": "tm_f5boKAPUgdvT",
+        "source_id": "src_3jg9p8wb6dglib",
+        "destination_id": "des_6OnHn8xN3quG",
+        "delivery_group": null,
+        "delivery_group_hash": null,
+        "event_data_id": "edt_OEyK0G168aXMDIf7HI0k",
+        "request_id": "req_7d5lrTHGordcTNE6f0uQ",
+        "cli_id": null,
+        "ingested_at": "2026-08-21T19:59:34.480Z",
+        "trace_context": {
+          "ingested_at": 1787342374480,
+          "is_large_payload": false,
+          "has_transformation": false,
+          "request_service_tier": "level1",
+          "context": {
+            "traceparent": "00-7af0fa6f359328e92d0b2cc431d06052-3528ea68e2420895-00"
+          }
+        },
+        "attempts": 1,
+        "status": "FAILED",
+        "state": "NONE",
+        "last_pending_at": "2026-08-21T19:59:34.619Z",
+        "next_attempt_meta": null,
+        "id": "evt_KG4GnPM0MvHqeQRppG",
+        "last_attempt_at": "2026-08-21T19:59:34.669Z",
+        "next_attempt_at": "2026-08-21T20:00:34.669Z",
+        "response_status": null,
+        "error_code": "CONNECTION_RESET",
+        "successful_at": null,
+        "issue_ids": [
+          "iss_Wxi2c14LglYcuYY9w7"
+        ],
+        "created_at": "2026-08-21T19:59:34.616943Z",
+        "updated_at": "2026-08-21T19:59:35.909477Z",
+        "data": {
+          "method": "POST",
+          "url": "https://httpstat.us/500",
+          "headers": {
+            "Accept": "application/json, text/plain, */*",
+            "Idempotency-Key": "evt_KG4GnPM0MvHqeQRppG",
+            "content-length": "109",
+            "content-type": "application/json",
+            "user-agent": "curl/8.7.1",
+            "X-Hookdeck-Signature": "ZXw4eiet97PM8tLbcQmf24gFD25WGW38uguaAomONRo=",
+            "X-Hookdeck-EventID": "evt_KG4GnPM0MvHqeQRppG",
+            "X-Hookdeck-RequestID": "req_7d5lrTHGordcTNE6f0uQ",
+            "X-Hookdeck-Original-IP": "51.14.229.101",
+            "X-Hookdeck-Verified": "false",
+            "X-Hookdeck-Event-URL": "https://dashboard.hookdeck.com/events/evt_KG4GnPM0MvHqeQRppG",
+            "X-Hookdeck-Source-Name": "demo-stripe",
+            "X-Hookdeck-Connection-Name": "demo-failing",
+            "X-Hookdeck-Destination-Name": "demo-always-500",
+            "X-Hookdeck-Attempt-Count": "2",
+            "X-Hookdeck-Attempt-Trigger": "MANUAL",
+            "X-Hookdeck-Will-Retry-After": ""
+          },
+          "body": {
+            "id": "evt_demo_fail_1",
+            "type": "payment_intent.succeeded",
+            "data": {
+              "object": {
+                "id": "pi_demo_1",
+                "amount": 2000
+              }
+            }
+          },
+          "raw_body": "{\"id\":\"evt_demo_fail_1\",\"type\":\"payment_intent.succeeded\",\"data\":{\"object\":{\"id\":\"pi_demo_1\",\"amount\":2000}}}",
+          "appended_headers": [
+            "Accept",
+            "Idempotency-Key",
+            "X-Hookdeck-Signature",
+            "X-Hookdeck-EventID",
+            "X-Hookdeck-RequestID",
+            "X-Hookdeck-Original-IP",
+            "X-Hookdeck-Verified",
+            "X-Hookdeck-Event-URL",
+            "X-Hookdeck-Source-Name",
+            "X-Hookdeck-Connection-Name",
+            "X-Hookdeck-Destination-Name",
+            "X-Hookdeck-Attempt-Count",
+            "X-Hookdeck-Attempt-Trigger",
+            "X-Hookdeck-Will-Retry-After"
+          ],
+          "path": "/500",
+          "query": "",
+          "parsed_query": {}
+        }
+      },
+      "trigger_attempt": {
+        "team_id": "tm_f5boKAPUgdvT",
+        "event_id": "evt_KG4GnPM0MvHqeQRppG",
+        "destination_id": "des_6OnHn8xN3quG",
+        "delivery_group": null,
+        "delivery_group_hash": null,
+        "attempt_number": 1,
+        "status": "FAILED",
+        "response_status": null,
+        "error_code": "CONNECTION_RESET",
+        "successful_at": null,
+        "delivered_at": "2026-08-21T19:59:34.669Z",
+        "delivery_latency": 50,
+        "responded_at": null,
+        "response_latency": null,
+        "ingest_to_attempt_ms": 189,
+        "ingest_service_tier": "level1",
+        "request_attempt_service_tier": "level1",
+        "rate_limited": false,
+        "has_transformation": false,
+        "was_scheduled": false,
+        "trigger": "INITIAL",
+        "state": "COMPLETED",
+        "id": "atm_Z0e3cGW8tNt20PwHqcko",
+        "created_at": "2026-08-21T19:59:35.877950Z",
+        "updated_at": "2026-08-21T19:59:35.877950Z",
+        "body": {}
+      }
+    }
+  },
+  "trigger_id": "it_6ewxqCxQnQjfLn",
+  "trigger": {
+    "id": "it_6ewxqCxQnQjfLn",
+    "team_id": "tm_f5boKAPUgdvT",
+    "name": null,
+    "type": "delivery",
+    "configs": {
+      "strategy": "first_attempt",
+      "connections": [
+        "web_PnoShqBgs3Ob"
+      ]
+    },
+    "disabled_at": null,
+    "updated_at": "2026-08-21T19:58:55.564Z",
+    "created_at": "2026-08-11T13:28:13.039Z",
+    "channels": {
+      "email": {}
+    }
+  },
+  "trigger_webhook": {
+    "id": "web_PnoShqBgs3Ob",
+    "team_id": "tm_f5boKAPUgdvT",
+    "updated_at": "2026-08-21T19:58:42.842Z",
+    "created_at": "2026-08-21T19:58:43.087Z",
+    "paused_at": null,
+    "name": "demo-failing",
+    "rules": [
+      {
+        "type": "retry",
+        "count": 1,
+        "interval": 60000,
+        "strategy": "exponential",
+        "response_status_codes": [
+          "500-599"
+        ]
+      }
+    ],
+    "deleted_at": null,
+    "description": null,
+    "destination": {
+      "id": "des_6OnHn8xN3quG",
+      "team_id": "tm_f5boKAPUgdvT",
+      "url": "https://httpstat.us/500",
+      "updated_at": "2026-08-21T19:58:42.842Z",
+      "created_at": "2026-08-21T19:58:42.847Z",
+      "rate_limit": null,
+      "rate_limit_period": "second",
+      "cli_path": null,
+      "path_forwarding_disabled": false,
+      "name": "demo-always-500",
+      "deleted_at": null,
+      "http_method": null,
+      "auth_method": {
+        "type": "HOOKDECK_SIGNATURE",
+        "config": {}
+      },
+      "description": null,
+      "type": "HTTP",
+      "config": null,
+      "rl_migration_status": null,
+      "delivery_groups": null,
+      "disabled_at": null
+    },
+    "source": {
+      "id": "src_3jg9p8wb6dglib",
+      "team_id": "tm_f5boKAPUgdvT",
+      "updated_at": "2026-08-21T19:58:42.847Z",
+      "created_at": "2026-08-21T19:57:04.208Z",
+      "integration_id": null,
+      "name": "demo-stripe",
+      "deleted_at": null,
+      "allowed_http_methods": [
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE"
+      ],
+      "custom_response": null,
+      "description": null,
+      "type": "WEBHOOK",
+      "config": {},
+      "integration": null,
+      "url": "https://events.hookdeck.com/e/src_3jg9p8wb6dglib",
+      "disabled_at": null,
+      "trim_payload": null,
+      "verification": null
+    },
+    "disabled_at": null,
+    "full_name": "demo-stripe -> demo-failing"
+  }
+}

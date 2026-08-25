@@ -269,7 +269,7 @@ export const triggerProperties: INodeProperties[] = [
 					default: '',
 					placeholder: 'body.customer_id',
 					description:
-						'Path in the payload to group deliveries by, so each value gets its own rate limit and one busy sender cannot crowd out the rest. Must start with headers, body, query or path.',
+						'Path in the payload to group deliveries by, so each value gets its own rate limit and one busy sender cannot crowd out the rest. Must start with headers, body, query or path. Delivery groups are an early access feature: if they are not enabled for your Hookdeck organization, publishing fails with "Delivery groups are not enabled for this organization".',
 				},
 				{
 					displayName: 'Delivery Group Rate Limit',
