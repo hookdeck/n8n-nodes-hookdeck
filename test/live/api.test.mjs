@@ -111,6 +111,15 @@ test('live API surface', { skip, concurrency: false }, async (t) => {
 			// API rejects the upsert outright, which is worth surfacing as a skip
 			// rather than a failure — the node built a payload Hookdeck understood.
 			if (/Delivery groups are not enabled/.test(error.message)) {
+				// Hookdeck puts this reason in `data` and sends no `message`, so the
+				// whole envelope used to be stringified into the error and the reader
+				// met `"level":"info"` before anything explaining the failure. This is
+				// the one live case that reaches that path, so it guards it.
+				assert.doesNotMatch(
+					error.message,
+					/"level"|"handled"|"report"/,
+					'the raw error envelope reached the user instead of the reason',
+				);
 				t.skip('delivery groups are not enabled for this organization');
 				return;
 			}
