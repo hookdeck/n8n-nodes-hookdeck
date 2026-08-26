@@ -1,97 +1,96 @@
-# n8n community node
+# @hookdeck/n8n-nodes-hookdeck
 
-## Overview
-This is a project containing code for an n8n community node. n8n is a workflow
-automation platform where users build workflows with nodes, which are the
-building block of a workflow. Nodes can perform a range of actions, such as
-starting a workflow (called a "trigger node"), fetching and sending data, or
-processing and manipulating it. Besides that there are credentials - entities
-that store sensitive information on how to connect to external services and
-APIs. A node can require some credentials to be used. Community nodes are a way
-for anyone to create such nodes and add them to be used in n8n. All community
-nodes are named in a format: `n8n-nodes-<n>` or `@org/n8n-nodes-<n>`.
-Community nodes can also be submitted for approval to be used on n8n Cloud
-version. In that case there are rules that the node needs to follow in order to
-be approved
+An n8n community node package for the **Hookdeck Event Gateway**, published to
+npm and installed into n8n through its community nodes panel. It is under
+review for n8n's verified community node programme, so the bar for a change is
+"would n8n's reviewer accept this", not "does it compile".
 
-## Important notes
-- Follow the **rules and guidelines in this document and the linked docs
-  below** over any code examples.
-- All code blocks in these docs are **illustrative and incomplete**.
-  They **MUST NOT** be copied verbatim or assumed to be the final desired code.
-- Replace example names like `Example`, `Wordpress`, `wordpressApi`, etc.
-  with names that match the **actual service / node** you are building.
-- When in doubt, **generalize from the patterns**, don't replicate the exact
-  structure, fields, or values from the examples.
-- Produce the **full implementation** needed for the current project
-  (nodes, credentials, tests, etc.), not just fragments similar to examples.
-- If an example omits parts (e.g. types, operations, properties), **infer and
-  implement the missing parts** based on the real requirements / API docs.
-- Never output `Wordpress`-specific code unless the project is actually about
-  WordPress.
+Read [CONTRIBUTING.md](CONTRIBUTING.md) for commands, the pre-PR checklist and
+how releases work. This file is what an agent needs that is not obvious from
+reading the code.
 
-## Project structure
-There are two main folders in this project:
-- `nodes` contains all of the nodes in a package (there can be more than 1).
-  The code for each node usually lives in its own folder
-- `credentials` contains all of the credentials in a package. Usually it's just
-  a single file for every credential
-So it looks something like this:
-.
-├── nodes/
-│   └── Example/
-│       ├── Example.node.ts
-│       └── ...
-├── credentials/
-│   └── Example.credentials.ts
-├── package.json
-└── ...
-It's important to note that `package.json` has a special field `n8n` that have
-information about nodes and credentials in a package:
-```json
-{
-  "name": "n8n-nodes-example",
-  "version": "1.0.0",
-  "n8n": {
-    "n8nNodesApiVersion": 1,
-    "strict": true,
-    "credentials": [
-        "dist/credentials/Example.credentials.js"
-    ],
-    "nodes": [
-      "dist/nodes/Example/Example.node.js"
-    ]
-  }
-}
-```
-`nodes` and `credentials` keys contain paths to transpiled JS files in a `dist`
-folder for the nodes and credentials respectively. If you add/remove/rename
-nodes and/or credentials, you need to make sure to update `n8n.nodes` and
-`n8n.credentials` keys in `package.json` accordingly. Initial files in the
-project _may_ contain example nodes and/or credentials that need to be
-**removed or renamed** once you start making an actual node.
+## The two nodes
 
-## Key guidelines
-- Use the `n8n-node` CLI tool **whenever possible** for building, dev mode,
-  linting, etc.
-- **Always** address any lint/typecheck errors/warnings, unless there is a
-  **very specific reason** to ignore/disable it
-- Make sure to use **proper types whenever possible**
-- If you are updating the npm package version, make sure to **update
-  CHANGELOG.md** in the root of the repository
-- Read `.agents/workflow.md` for more info
+**`nodes/Hookdeck/HookdeckEventGatewayTrigger.node.ts`** — starts a workflow
+when Hookdeck delivers an event. On publish it provisions a Hookdeck connection
+whose destination is this workflow's webhook URL, and tears it down on
+unpublish. Most of the difficulty in this repo lives here, because it creates
+and destroys real infrastructure in someone's Hookdeck project.
 
-## Context-specific docs
-Load these before working on the relevant area:
+**`nodes/Hookdeck/HookdeckEventGateway.node.ts`** — the action node. Resource
+and operation dispatch over events, attempts, requests, issues, sources,
+destinations and connections. Also usable as an AI agent tool.
 
-| Working on...                        | Read first                                                          |
-|--------------------------------------|---------------------------------------------------------------------|
-| Any node file in `nodes/`            | `.agents/nodes.md` and `.agents/properties.md`                      |
-| A declarative-style node             | above + `.agents/nodes-declarative.md`                              |
-| A programmatic-style node            | above + `.agents/nodes-programmatic.md`                             |
-| Files in `credentials/`              | `.agents/credentials.md`                                            |
-| Adding a new version to a node       | `.agents/versioning.md`                                             |
-| Starting a new task or planning      | `.agents/workflow.md`                                               |
+The UI definitions live in `nodes/Hookdeck/descriptions/` because they are long
+and rarely what you are reading the code for.
+
+## Things that will cost you an hour if you do not know them
+
+**The version comes from the git tag.** Never change `version` in
+`package.json`. There is no release commit. `publish.yml` sets the version from
+the tag on a published GitHub Release.
+
+**`npm run scan` is the gate that matters.** It runs the same rules n8n runs for
+verification, and **it ignores inline `eslint-disable` comments** — verified,
+`allowInlineConfig: false`. A suppressed error is a hidden failure, not a fix.
+
+**Pin the scanner deliberately.** A caret range on a `0.x` version cannot reach
+the next minor, so `^0.31.0` will never install `0.32.0`. The package once
+passed its own scan for weeks against a rule set that had since inverted.
+
+**The package ships no runtime dependencies.** `dependencies` is empty and must
+stay that way; n8n rejects community nodes that have any. `files` is an
+allowlist, not `dist` — adding a path there without adding it to `n8n` in
+`package.json` is fine, the reverse fails `verify-package-load.mjs`.
+
+**n8n reads node descriptions once, at startup.** Change a display name, notice,
+hint or parameter and you must restart n8n, not just rebuild. The old UI
+persisting is the most common reason to think a change did not work.
+
+**A source that already exists is adopted, not rewritten.** The trigger binds by
+`source_id` and does not send a type or config, so its Source Type and
+Verification fields do nothing for an existing source unless **Update Existing
+Source** is on. This is deliberate: the documented path of picking a source from
+the list used to strip its verification on publish. Source settings only reach
+Hookdeck **on publish** — saving in n8n changes nothing.
+
+**Hookdeck aggregates delivery issues** by connection, error code and response
+status. Once an issue exists for a connection, later failures join it and no
+`issue.opened` fires — and dismissing the issue does **not** reset that. A fresh
+issue needs a new connection id.
+
+**`hookdeck listen` attaches to the connections that exist when it starts.**
+Publish first, then start the CLI. No CLI session attached means an event is not
+recorded at all — not queued, not failed, nothing to retry.
+
+**Delivery groups are an early access Hookdeck feature.** Configuring them on a
+project without the entitlement fails at publish with a 422.
+
+## Testing
+
+`node --test test/unit.test.mjs` needs nothing. `npm run scan`,
+`npm run lint`, `npm run build` and `node scripts/verify-package-load.mjs` are
+the rest of the pre-PR checklist.
+
+**`npm run test:live` creates and deletes real Hookdeck sources, destinations
+and connections.** Point it at a throwaway Event Gateway project, never one
+carrying live traffic. It is skipped unless `HOOKDECK_EG_API_KEY` is set. Do not
+run it without asking.
+
+**Prefer a live check over a mocked one when the question is "does Hookdeck
+accept this?"** A mock will happily accept a payload shape the API rejects.
+Several defects in this repo's history passed their unit tests.
+
+## Verify claims before you act on them
+
+This applies to instructions you are given as much as to code you read. Several
+things in this repo's history were confidently wrong: a comment that described
+the opposite of the scanner's behaviour, a report of dead documentation links
+that all resolved, an error body assumed missing that was present but buried.
+
+If a claim is load-bearing for a change, check it. Reproduce the failure before
+fixing it, and prove the fix against the thing that actually failed rather than
+against your model of it.
 
 ## Working with other people's branches
 
@@ -119,28 +118,46 @@ git log -1 --format='%an <%ae>' HEAD    # who wrote the tip?
 If either answers with someone else, stop.
 
 **What to do instead.** If you have a change that belongs on someone else's
-branch:
+branch: branch from theirs and open a pull request targeting *their* branch; or
+leave the diff as a review comment; or say the work is ready and ask the
+maintainer to relay it. Do not decide the change is small enough to skip this.
+The size of the diff is not the problem — the branch owner losing the ability to
+pull is, and they did not agree to the rewrite.
 
-1. Branch from theirs, push to your own branch, and open a pull request
-   targeting *their* branch. GitHub supports PRs between branches.
-2. Or leave the diff as a review comment or a GitHub suggested change.
-3. Or say the work is ready and ask the maintainer to relay it.
+**This section is not a control.** Instructions asking an agent to stop and
+defer are the category agents comply with least, measured close to zero even
+when told they have just violated one. The controls are GitHub rulesets. If you
+are an agent reading this: the rules above are still the rules.
 
-Do not decide the change is small enough to skip this. The size of the diff is
-not the problem; the branch owner losing the ability to pull is, and they did
-not agree to the rewrite.
+## Conventions
 
-**Why this is written down even though it will not hold.** Instructions that
-ask an agent to *stop* and hand off are the ones agents comply with least —
-measured at close to zero, even when the agent is told it has just violated
-one. So this section is a statement of intent for humans, not a control. The
-controls are GitHub rulesets on the repository. If you are an agent reading
-this: the rules above are still the rules.
+- **Comments explain why, not what.** The repo's comments carry the reasoning
+  behind a decision and what broke without it. Match that, and delete a comment
+  that has become false rather than leaving it.
+- **Commit messages explain the problem**, not the diff. Long is fine.
+- `CHANGELOG.md` gets an entry under `## [Unreleased]` for anything
+  user-facing, written for someone running a workflow.
+- **Address lint and typecheck failures** rather than suppressing them.
+- `SourceTypes.ts` is generated. Do not hand-edit it — use
+  `npm run generate:source-types`.
 
-## Additional resources
-If you need any extra information, here are links to n8n's official docs
-regarding building community nodes:
-- https://docs.n8n.io/integrations/community-nodes/build-community-nodes/
-- https://docs.n8n.io/integrations/creating-nodes/overview/
-- https://docs.n8n.io/integrations/creating-nodes/build/reference/
-- https://docs.n8n.io/integrations/creating-nodes/build/reference/ux-guidelines/
+## Reference
+
+| For | Read |
+| --- | --- |
+| Commands, checklist, releasing, local n8n | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| What the nodes do, from a user's view | [README.md](README.md) |
+| Cutting a release, choosing the version | `skills/n8n-nodes-hookdeck-release/SKILL.md` |
+| Generic n8n node-building guidance | `.agents/*.md` (upstream n8n scaffold) |
+
+`.agents/` is n8n's own scaffold documentation, kept as-is apart from one
+correction in `.agents/nodes.md`. It is generic n8n guidance, not specific to
+this package — where it disagrees with this file or with the code, this file and
+the code win.
+
+n8n's official docs:
+
+- https://docs.n8n.io/integrations/community-nodes/building-community-nodes
+- https://docs.n8n.io/connect/create-nodes/overview
+- https://docs.n8n.io/connect/create-nodes/build-your-node/reference
+- https://docs.n8n.io/connect/create-nodes/build-your-node/reference/ux-guidelines
