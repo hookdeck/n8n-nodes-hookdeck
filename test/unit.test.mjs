@@ -1274,6 +1274,49 @@ test('hookdeckApiRequest puts the API reason in the error message', async () => 
 	);
 });
 
+test('hookdeckApiRequest reads the reason out of `data` when there is no message', async () => {
+	// The exact body Hookdeck returns for a delivery-group upsert on a project
+	// without the entitlement. There is no `message`, so before this was handled
+	// the whole object was stringified and the user read `"level":"info"` on a red
+	// activation banner before reaching the actual reason.
+	const ctx = fakeApiContext({
+		statusCode: 422,
+		body: {
+			level: 'info',
+			handled: true,
+			report: true,
+			data: ['Delivery groups are not enabled for this organization'],
+			status: 422,
+			code: 'UNPROCESSABLE_ENTITY',
+		},
+	});
+
+	await assert.rejects(
+		() => hookdeckApiRequest.call(ctx, 'PUT', '/connections'),
+		(error) => {
+			assert.match(error.message, /Delivery groups are not enabled for this organization/);
+			assert.doesNotMatch(error.message, /"level"/, 'internal fields must not reach the user');
+			assert.doesNotMatch(error.message, /handled/);
+			return true;
+		},
+	);
+});
+
+test('hookdeckApiRequest prefers message but still appends data', async () => {
+	const ctx = fakeApiContext({
+		statusCode: 422,
+		body: { message: 'Unprocessable', data: ['destination.config.url must be a valid uri'] },
+	});
+	await assert.rejects(
+		() => hookdeckApiRequest.call(ctx, 'PUT', '/connections'),
+		(error) => {
+			assert.match(error.message, /Unprocessable/);
+			assert.match(error.message, /must be a valid uri/);
+			return true;
+		},
+	);
+});
+
 test('hookdeckApiRequest reports per-field validation errors', async () => {
 	const ctx = fakeApiContext({
 		statusCode: 400,

@@ -136,10 +136,22 @@ function describeHookdeckPayload(payload: unknown): string | undefined {
 	if (payload === undefined || payload === null) return undefined;
 	if (typeof payload === 'string') return payload;
 
-	const body = payload as { message?: string; errors?: unknown };
+	const body = payload as { message?: string; errors?: unknown; data?: unknown };
 	const parts: string[] = [];
 
 	if (typeof body.message === 'string') parts.push(body.message);
+
+	// Some Hookdeck failures carry the human reason in `data` and no `message` at
+	// all — a delivery-group upsert on a project without the entitlement answers
+	// {"level":"info","handled":true,"data":["Delivery groups are not enabled for
+	// this organization"],"status":422}. Without this the whole body falls through
+	// to the stringify below, so the reader meets `"level":"info"` before the
+	// reason, on what is a hard failure the workflow could not complete.
+	if (Array.isArray(body.data)) {
+		for (const entry of body.data) {
+			if (typeof entry === 'string' && entry) parts.push(entry);
+		}
+	}
 
 	if (body.errors && typeof body.errors === 'object') {
 		for (const [field, issue] of Object.entries(body.errors as Record<string, unknown>)) {

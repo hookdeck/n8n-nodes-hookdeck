@@ -1,0 +1,53 @@
+{
+  "name": "Hookdeck — Stripe idempotency",
+  "nodes": [
+    {
+      "parameters": {
+        "source": {
+          "__rl": true,
+          "value": "stripe",
+          "mode": "name"
+        },
+        "sourceType": "STRIPE",
+        "options": {
+          "deduplicateWindow": 0
+        }
+      },
+      "id": "a0000000-0000-4000-8000-000000000002",
+      "name": "Hookdeck Event Gateway Trigger",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [360, 0]
+    },
+    {
+      "parameters": {
+        "operation": "removeItemsSeenInPreviousExecutions",
+        "logic": "removeItemsWithAlreadySeenKeyValues",
+        "dedupeValue": "={{ $json.body.id }}",
+        "options": {}
+      },
+      "id": "a0000000-0000-4000-8000-000000000003",
+      "name": "Only if this Stripe event is new",
+      "type": "n8n-nodes-base.removeDuplicates",
+      "typeVersion": 2,
+      "position": [620, 0]
+    },
+    {
+      "parameters": {},
+      "id": "a0000000-0000-4000-8000-000000000004",
+      "name": "Fulfil order",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [880, 0]
+    }
+  ],
+  "connections": {
+    "Hookdeck Event Gateway Trigger": {
+      "main": [[{ "node": "Only if this Stripe event is new", "type": "main", "index": 0 }]]
+    },
+    "Only if this Stripe event is new": {
+      "main": [[{ "node": "Fulfil order", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": { "executionOrder": "v1" }
+}
