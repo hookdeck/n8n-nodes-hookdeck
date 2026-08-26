@@ -93,6 +93,50 @@ Load these before working on the relevant area:
 | Adding a new version to a node       | `.agents/versioning.md`                                             |
 | Starting a new task or planning      | `.agents/workflow.md`                                               |
 
+## Working with other people's branches
+
+More than one person contributes here, and more than one of them works with an
+agent. **Branches are owned.** Treat a branch you did not create as read-only,
+whoever or whatever created it.
+
+**Do not, without an explicit instruction from the maintainer in this session:**
+
+- `git push` — forced or not — to a branch you did not create. Rebasing
+  someone's unmerged commit rewrites its committer and breaks their `git pull`.
+- Merge a pull request you did not open, whether by `gh pr merge`, the API, or
+  the UI.
+- `git rebase`, `git commit --amend` or `git reset` on a branch with an open
+  pull request opened by someone else.
+- Push to `main`. Everything lands through a pull request.
+
+**gate — check who owns the branch before any push:**
+
+```bash
+gh pr view --json author,headRefName    # whose PR is this?
+git log -1 --format='%an <%ae>' HEAD    # who wrote the tip?
+```
+
+If either answers with someone else, stop.
+
+**What to do instead.** If you have a change that belongs on someone else's
+branch:
+
+1. Branch from theirs, push to your own branch, and open a pull request
+   targeting *their* branch. GitHub supports PRs between branches.
+2. Or leave the diff as a review comment or a GitHub suggested change.
+3. Or say the work is ready and ask the maintainer to relay it.
+
+Do not decide the change is small enough to skip this. The size of the diff is
+not the problem; the branch owner losing the ability to pull is, and they did
+not agree to the rewrite.
+
+**Why this is written down even though it will not hold.** Instructions that
+ask an agent to *stop* and hand off are the ones agents comply with least —
+measured at close to zero, even when the agent is told it has just violated
+one. So this section is a statement of intent for humans, not a control. The
+controls are GitHub rulesets on the repository. If you are an agent reading
+this: the rules above are still the rules.
+
 ## Additional resources
 If you need any extra information, here are links to n8n's official docs
 regarding building community nodes:
