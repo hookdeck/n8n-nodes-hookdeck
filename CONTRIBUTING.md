@@ -122,6 +122,17 @@ before starting n8n and the node provisions an HTTP destination instead. See
 [How events reach n8n](README.md#how-events-reach-n8n) for what differs between
 the two.
 
+**Uninstalling through the Public API is a one-way door.** n8n's Public API will
+uninstall a community package — `DELETE /api/v1/community-packages/<name>` — but
+refuses to install one that is not on its vetted list:
+`POST /api/v1/community-packages` answers `Package ... is not vetted for
+installation`. The UI has no such check, which is why installing it by hand in
+the first place works. Until this package is verified, treat an API uninstall as
+irreversible from the API: putting it back means the n8n UI (Settings → Community
+nodes), or placing it in `~/.n8n/nodes` and registering it in n8n's database by
+hand. Scripts that tear an instance down and expect to build it back up should
+not use the API for this step.
+
 ## Releasing
 
 Publishing is driven by a **GitHub Release**, not by a tag push and never from a
