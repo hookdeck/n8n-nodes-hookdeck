@@ -25,6 +25,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Both nodes carry search aliases, so the nodes panel finds them for `webhook`,
+  `event`, `ingest`, `reverse proxy`, `queue`, `retry` and `replay`, and the
+  trigger additionally for `tunnel` and `localhost`. Searching for what you are
+  trying to do is how anyone looks for a node they cannot yet name.
 - **Delivery Group Key** says in its description that delivery groups are an
   early access feature, and what publishing does if your organization does not
   have them. Previously the first sign was a failed publish.
