@@ -143,7 +143,8 @@ npm provenance statement, so the publish has to happen in CI.
    [package.json](package.json) to the new version and promotes
    `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) to that same version with a
    date. Both live in the same PR — the version on `main` is what n8n's
-   verification review compares against npm.
+   verification review compares against npm, and CI fails a version with no
+   matching CHANGELOG section (`scripts/verify-package-load.mjs`).
 2. Check `main` is green.
 3. Draft the release notes. Write them for someone running a workflow: what
    changes for them, and whether they have to do anything.
