@@ -3,7 +3,8 @@
 	"nodeVersion": "1.0",
 	"codexVersion": "1.0",
 	"categories": [
-		"Development"
+		"Development",
+		"Communication"
 	],
 	"resources": {
 		"credentialDocumentation": [
@@ -16,5 +17,16 @@
 				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#hookdeck-event-gateway-node"
 			}
 		]
-	}
+	},
+	"alias": [
+		"Webhook",
+		"Event",
+		"Ingest",
+		"Reverse Proxy",
+		"Queue",
+		"Retry",
+		"Replay",
+		"Delivery",
+		"API"
+	]
 }
