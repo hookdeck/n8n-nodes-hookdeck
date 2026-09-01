@@ -9,8 +9,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Fixed
 
 - Both nodes listed a `Developer Tools` codex category, which is not one of the
-  categories n8n supports. The n8n editor dropped it silently, so the nodes only
-  ever appeared under `Development` — the visible category list is unchanged.
+  categories n8n supports. The n8n editor dropped it silently, so it never put
+  the nodes anywhere.
 - `version` in `package.json` now tracks what is on npm. It read `0.1.0` while
   npm served `0.2.0`, because the publish workflow took the version from the
   release tag instead of the repository. Releases now bump `package.json` in a
@@ -25,6 +25,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Changed
 
+- Both nodes are filed under **Communication** as well as **Development**, which
+  is where n8n files event transports: AMQP, MQTT, AWS SNS and AWS SQS all carry
+  both. Nothing about the nodes changes, only where the nodes panel lists them.
 - Both nodes carry search aliases, so the nodes panel finds them for `webhook`,
   `event`, `ingest`, `reverse proxy`, `queue`, `retry` and `replay`, and the
   trigger additionally for `tunnel` and `localhost`. Searching for what you are
