@@ -1,6 +1,6 @@
 {
 	"name": "@hookdeck/n8n-nodes-hookdeck",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"description": "Use the Hookdeck Event Gateway from n8n: manage sources, destinations and connections, and trigger workflows from events Hookdeck delivers",
 	"license": "MIT",
 	"homepage": "https://hookdeck.com",
