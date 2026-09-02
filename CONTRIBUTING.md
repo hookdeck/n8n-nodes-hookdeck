@@ -139,8 +139,12 @@ Publishing is driven by a **GitHub Release**, not by a tag push and never from a
 laptop. n8n requires community nodes to be published from GitHub Actions with an
 npm provenance statement, so the publish has to happen in CI.
 
-1. Land everything through PRs, including promoting `## [Unreleased]` in
-   [CHANGELOG.md](CHANGELOG.md) to the new version with a date.
+1. Land everything through PRs, including a release PR that sets `version` in
+   [package.json](package.json) to the new version and promotes
+   `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) to that same version with a
+   date. Both live in the same PR — the version on `main` is what n8n's
+   verification review compares against npm, and CI fails a version with no
+   matching CHANGELOG section (`scripts/verify-package-load.mjs`).
 2. Check `main` is green.
 3. Draft the release notes. Write them for someone running a workflow: what
    changes for them, and whether they have to do anything.
@@ -153,13 +157,20 @@ npm provenance statement, so the publish has to happen in CI.
    Or use the GitHub UI — Releases → Draft a new release.
 
 Publishing then happens automatically:
-[`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
-version from it, re-runs lint, the verification scan, the build, the load check
-and the unit tests, and publishes with provenance. A release marked
-**pre-release** publishes under the `beta` dist-tag instead of `latest`.
+[`publish.yml`](.github/workflows/publish.yml) checks out the tag, **fails if
+the tag does not match `version` in `package.json`**, then re-runs lint, the
+verification scan, the build, the load check and the unit tests, and publishes
+with provenance. A release marked **pre-release** publishes under the `beta`
+dist-tag instead of `latest`.
 
-There is no release commit — the tag is the version, and `package.json` in git
-is not bumped to match.
+`package.json` is the version; the tag only has to agree with it. If the guard
+fails, bump `package.json` on `main` in a PR, then delete the release and its
+tag and create it again — the workflow runs on `release: published`, so editing
+the failed release does not re-run it.
+
+Between releases, `version` in `package.json` is the **last published** version,
+not the next one. That is the state n8n's review expects: `main` and npm
+matching.
 
 ### Choosing the version
 

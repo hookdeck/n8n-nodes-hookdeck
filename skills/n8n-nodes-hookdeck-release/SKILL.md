@@ -40,8 +40,11 @@ explicitly overrides.
       would fail n8n's review.
 - [ ] **gate — CI green:** the commit being released has green checks. For a
       stable release that means the tip of `main`.
-- [ ] **CHANGELOG:** `## [Unreleased]` promoted to the new version with a date, in
-      a normal PR **before** the release.
+- [ ] **gate — release PR merged:** `version` in `package.json` set to the new
+      version **and** `## [Unreleased]` in the CHANGELOG promoted to that version
+      with a date, in one normal PR **before** the release. The publish workflow
+      refuses a tag that disagrees with `package.json`, and n8n's verification
+      review compares `main` against npm.
 - [ ] **Notes drafted:** see **Drafting release notes** and
       [references/release-notes-template.md](references/release-notes-template.md).
       Include the **Full Changelog** compare link.
@@ -59,14 +62,27 @@ explicitly overrides.
 release in the GitHub UI or with `gh release create` creates the tag and starts
 the workflow together.
 
-The workflow checks out the release tag, sets the version in `package.json` from
-the tag name, re-runs lint, scan, build, the load check and the unit tests, then
-`npm publish --provenance`. A **pre-release** publishes under the `beta`
-dist-tag so `npm install @hookdeck/n8n-nodes-hookdeck` keeps resolving to the
-last stable version.
+The workflow checks out the release tag, **fails if the tag does not match
+`version` in `package.json`**, then re-runs lint, scan, build, the load check and
+the unit tests, then `npm publish --provenance`. A **pre-release** publishes
+under the `beta` dist-tag so `npm install @hookdeck/n8n-nodes-hookdeck` keeps
+resolving to the last stable version.
 
-There is no release commit. The tag is the version, so `package.json` in git
-stays at whatever it was — do not "fix" it in a follow-up commit.
+`package.json` is the version and the tag agrees with it. The bump lands on
+`main` in the release PR, before the release exists — never as a follow-up
+commit after publishing, which leaves a window where `main` and npm disagree.
+That window is exactly what n8n flagged in the 0.2.0 review, when `main` still
+read `0.1.0`.
+
+If the guard fails, the release is already created and the tag already exists.
+Bump `package.json` on `main`, then delete both and recreate the release:
+
+```bash
+gh release delete v0.3.0 --repo hookdeck/n8n-nodes-hookdeck --cleanup-tag --yes
+```
+
+Editing the failed release does not re-run the workflow — it fires on
+`release: published`.
 
 ## Auth: provenance is not trusted publishing
 
@@ -126,7 +142,8 @@ credential class or a property is a candidate break. Read it, do not skim it.
 
 ## Stable release
 
-1. Land everything, including the CHANGELOG promotion, through PRs.
+1. Land everything, including the release PR that bumps `package.json` and
+   promotes the CHANGELOG, through PRs.
 2. Confirm `main` is green:
 
    ```bash
@@ -150,7 +167,8 @@ credential class or a property is a candidate break. Read it, do not skim it.
 
 ## Pre-release (beta)
 
-Tag as `v0.3.0-beta.1`. The **base version** still has to satisfy the table
+Tag as `v0.3.0-beta.1`, with `package.json` set to the same `0.3.0-beta.1` on
+the branch being released. The **base version** still has to satisfy the table
 above relative to the last stable release — a beta containing a breaking change
 is `v1.0.0-beta.1`, not `v0.9.0-beta.1`.
 
@@ -239,6 +257,8 @@ or an exceptionally large contribution. No generic thanks block.
   silently.
 - Do not publish from a laptop. n8n requires provenance from GitHub Actions, and
   a local `npm publish` produces none.
+- Do not tag a version that `package.json` on the target branch does not carry.
+  The workflow stops it, and the fix costs a deleted release and tag.
 - Respect branch protection; no surprise tags.
 
 ## Related files
