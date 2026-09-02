@@ -1,6 +1,6 @@
 import type { INodeProperties } from 'n8n-workflow';
 
-import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
+import { sourceConfigProperties } from './SourceProperties';
 
 /**
  * Property builders.
@@ -368,16 +368,10 @@ export const sourceProperties: INodeProperties[] = [
 		description:
 			'Name for the new source. Letters, numbers, hyphens and underscores; anything else is replaced.',
 	},
-	{
-		displayName: 'Source Type',
-		name: 'sourceType',
-		type: 'options',
-		default: 'WEBHOOK',
-		displayOptions: { show: { resource: ['source'], operation: ['getOrCreate'] } },
-		description:
-			'Platform sending events to this source. Choosing a platform applies its signature verification scheme.',
-		options: SOURCE_TYPE_OPTIONS,
-	},
+	// Source Type plus the verification fields, the same set the trigger asks for.
+	// Creating a verified source used to mean hand-writing the config JSON here
+	// while the trigger had labelled fields for it.
+	...sourceConfigProperties({ resource: ['source'], operation: ['getOrCreate'] }),
 	{
 		displayName: 'Source Config (JSON)',
 		name: 'sourceConfigJson',
@@ -385,7 +379,7 @@ export const sourceProperties: INodeProperties[] = [
 		default: '',
 		displayOptions: { show: { resource: ['source'], operation: ['getOrCreate'] } },
 		description:
-			'Advanced. Sent as the source config, for verification schemes that need explicit fields, e.g. {"auth_type":"HMAC","auth":{...}}.',
+			'Advanced. Merged over the fields above, for verification schemes they cannot express, e.g. {"auth_type":"HMAC","auth":{...}}.',
 	},
 	{
 		displayName: 'Source Name',

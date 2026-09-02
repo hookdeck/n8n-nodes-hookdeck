@@ -15,6 +15,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 
 import { HookdeckEventGatewayTrigger } from '../../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js';
 import { HookdeckEventGateway } from '../../dist/nodes/Hookdeck/HookdeckEventGateway.node.js';
@@ -26,7 +27,9 @@ import {
 	connectionForSource,
 	liveExecuteContext,
 	liveHookContext,
+	ingest,
 	skip,
+	wasVerified,
 } from './_harness.mjs';
 
 const { create } = new HookdeckEventGatewayTrigger().webhookMethods.default;
@@ -131,7 +134,11 @@ test('provisioning against an existing source', { skip, concurrency: false }, as
 		};
 
 		await create.call(
-			liveHookContext({ webhookUrl: `https://example.com/webhook/${RUN_ID}`, staticData: {}, params }),
+			liveHookContext({
+				webhookUrl: `https://example.com/webhook/${RUN_ID}`,
+				staticData: {},
+				params,
+			}),
 		);
 		const { models: adopted } = await api('GET', `/sources?name=${sourceName}`);
 		assert.equal(
@@ -209,6 +216,50 @@ test('provisioning against an existing source', { skip, concurrency: false }, as
 		const setup = ctx.warnings.join('\n');
 		assert.match(setup, /hookdeck listen 5678/);
 		assert.match(setup, /Delivery Rate Limit and Delivery Group Key are not applied/);
+	});
+
+	await t.test('Source Get or Create applies verification, not just a type', async () => {
+		// The API cannot answer this: a platform source never echoes `auth_type`,
+		// configured or not, so a source with a secret and one without look
+		// identical. An inbound request's `verified` field is the only signal, so
+		// the check is a real signed payload and a forged one.
+		const sourceName = `${PREFIX}-goc-verified`;
+		const secret = `whsec_${RUN_ID}`;
+		const created = (
+			await new HookdeckEventGateway().execute.call(
+				liveExecuteContext({
+					resource: 'source',
+					operation: 'getOrCreate',
+					sourceName,
+					sourceType: 'STRIPE',
+					platformSecret: secret,
+					sourceConfigJson: '',
+				}),
+			)
+		)[0][0].json;
+
+		const signed = `goc-signed-${RUN_ID}`;
+		const body = JSON.stringify({ type: 'payment_intent.succeeded', marker: signed });
+		const timestamp = Math.floor(Date.now() / 1000);
+		const signature = createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex');
+
+		const accepted = await ingest(created.url, body, {
+			'Stripe-Signature': `t=${timestamp},v1=${signature}`,
+		});
+		assert.ok(accepted.ok, `the edge refused a correctly signed payload: ${accepted.status}`);
+		assert.equal(
+			await wasVerified(created.id, signed),
+			true,
+			'the secret was accepted and then not applied to the source',
+		);
+
+		const unsigned = `goc-unsigned-${RUN_ID}`;
+		await ingest(created.url, JSON.stringify({ marker: unsigned }));
+		assert.equal(
+			await wasVerified(created.id, unsigned),
+			false,
+			'an unsigned payload was reported verified',
+		);
 	});
 
 	await t.test('Source Get or Create returns the public URL the provider needs', async () => {
