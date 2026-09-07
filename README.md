@@ -451,16 +451,19 @@ follow. If lossless payloads matter, compare against the original request under
 
 ### Example workflows
 
-Two importable workflows are in [`examples/`](examples/), both built and run
+Three importable workflows are in [`examples/`](examples/), all built and run
 against a real n8n instance:
 
 | Workflow | Problem it solves |
 | --- | --- |
 | [`process-each-event-once.json`](examples/process-each-event-once.json) | A retried delivery runs the workflow twice. Gates on `hookdeck.idempotencyKey`, which is stable across retries of one event, so the second arrival stops before doing the work again. |
 | [`catch-events-on-final-attempt.json`](examples/catch-events-on-final-attempt.json) | An event that fails every retry disappears silently. Routes on `hookdeck.isLastAttempt` so the final attempt reaches a dead-letter branch. |
+| [`ai-incident-agent.json`](examples/ai-incident-agent.json) | A destination starts failing and retries pile up unnoticed. Hookdeck's own `issue.opened` notification starts a workflow whose AI Agent reads the issue, counts the failing events and pauses the connection — the action node used as an agent tool. |
 
-Neither is possible with n8n's built-in Webhook node, because both depend on
-delivery metadata only a gateway can supply. See
+The first two are not possible with n8n's built-in Webhook node, because both
+depend on delivery metadata only a gateway can supply, and the third is not
+possible without a gateway at all: the event it reacts to is the gateway
+reporting a delivery it could not make. See
 [`examples/README.md`](examples/README.md) for how each behaves and what was
 observed running them.
 

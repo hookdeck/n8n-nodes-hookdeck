@@ -17,14 +17,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Config (JSON) is still there for schemes the fields cannot express, and still
   wins where they overlap.
 
-### Changed
-
-- **Delivery Group Key** says in its description that delivery groups are an
-  early access feature, and what publishing does if your organization does not
-  have them. Previously the first sign was a failed publish.
+## [0.2.1] - 2026-09-02
 
 ### Fixed
 
+- Both nodes listed a `Developer Tools` codex category, which is not one of the
+  categories n8n supports. The n8n editor dropped it silently, so it never put
+  the nodes anywhere.
+- `version` in `package.json` now tracks what is on npm. It read `0.1.0` while
+  npm served `0.2.0`, because the publish workflow took the version from the
+  release tag instead of the repository. Releases now bump `package.json` in a
+  PR before the release is created, and the workflow refuses a tag that
+  disagrees with it.
 - A Hookdeck error that carries its reason in `data` rather than `message` now
   reads as a sentence instead of a raw JSON body. Configuring **Delivery
   Groups** on a project where the feature is not enabled used to fail on publish
@@ -32,6 +36,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   which looks like a broken node rather than a feature you have to ask for. It
   now says `Delivery groups are not enabled for this organization`.
 
+### Changed
+
+- Both nodes are filed under **Communication** as well as **Development**, which
+  is where n8n files event transports: AMQP, MQTT, AWS SNS and AWS SQS all carry
+  both. Nothing about the nodes changes, only where the nodes panel lists them.
+- Both nodes carry search aliases, so the nodes panel finds them for `webhook`,
+  `event`, `ingest`, `reverse proxy`, `queue`, `retry` and `replay`, and the
+  trigger additionally for `tunnel` and `localhost`. Searching for what you are
+  trying to do is how anyone looks for a node they cannot yet name.
+- **Delivery Group Key** says in its description that delivery groups are an
+  early access feature, and what publishing does if your organization does not
+  have them. Previously the first sign was a failed publish.
 ## [0.2.0] - 2026-08-21
 
 ### Changed
@@ -202,6 +218,7 @@ name so trusted publishing could be configured, and is deprecated.
   The token step that expression guarded is gone entirely: npm exchanges the
   Actions OIDC token itself, so there was nothing for it to do.
 
-[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/hookdeck/n8n-nodes-hookdeck/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/hookdeck/n8n-nodes-hookdeck/releases/tag/v0.1.0

@@ -47,6 +47,56 @@ const declared = pkg.n8n ?? {};
 check(Array.isArray(declared.nodes) && declared.nodes.length > 0, 'package.json declares n8n.nodes');
 check(Array.isArray(declared.credentials), 'package.json declares n8n.credentials');
 
+// ─── The version, which nothing else compares to anything ──────────────────────
+//
+// n8n's scanner has a `require-version` rule and it passed this package at
+// 0.1.0 while npm served 0.2.0: it asserts the field exists and parses as
+// semver, and compares it to nothing. It structurally cannot compare it — a
+// scan sees one tree. Even the published path, which has both the tarball and
+// the attested source, lints them separately and ANDs the results.
+//
+// The tag guard in publish.yml catches a release whose tag disagrees with this
+// file. This catches the same mistake a step earlier, at PR time, where the fix
+// is an edit rather than a deleted release and tag: a version with no CHANGELOG
+// section is a bump nobody wrote notes for, which is the shape the 0.2.0 miss
+// actually had.
+//
+// Pre-releases are exempt. 0.3.0-beta.1 ships before a 0.3.0 section exists,
+// which is the point of shipping a beta.
+const SEMVER = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/;
+check(SEMVER.test(pkg.version ?? ''), 'package.json version is a semantic version', pkg.version);
+
+const changelogPath = join(ROOT, 'CHANGELOG.md');
+if (SEMVER.test(pkg.version ?? '') && !pkg.version.includes('-') && existsSync(changelogPath)) {
+	const changelog = await readFile(changelogPath, 'utf8');
+	check(
+		changelog.includes(`## [${pkg.version}]`),
+		`CHANGELOG.md has a section for ${pkg.version}`,
+		'promote `## [Unreleased]` in the same PR that bumps the version',
+	);
+}
+
+/**
+ * The categories n8n supports. An unsupported one is not an error anywhere: the
+ * editor drops it silently, the eslint ruleset has no rule that reads a codex
+ * file, and the scanner lints those files with that ruleset. `Developer Tools`
+ * survived two releases that way and came back as a review comment.
+ *
+ * https://docs.n8n.io/integrations/creating-nodes/build/reference/node-codex-files/
+ */
+const CODEX_CATEGORIES = new Set([
+	'Data & Storage',
+	'Finance & Accounting',
+	'Marketing & Content',
+	'Productivity',
+	'Miscellaneous',
+	'Sales',
+	'Development',
+	'Analytics',
+	'Communication',
+	'Utility',
+]);
+
 /** Instantiate every declared class, the way n8n's loader does. */
 const loadDeclared = (paths, kind) => {
 	const loaded = [];
@@ -118,6 +168,18 @@ for (const { relative, absolute, instance } of nodes) {
 			`${label} codex names the right node type`,
 			`codex says "${codex.node}", expected "${expectedType}"`,
 		);
+
+		check(
+			Array.isArray(codex.categories) && codex.categories.length > 0,
+			`${label} codex declares a category`,
+		);
+		for (const category of codex.categories ?? []) {
+			check(
+				CODEX_CATEGORIES.has(category),
+				`${label} codex category "${category}" is one n8n supports`,
+				`allowed: ${[...CODEX_CATEGORIES].join(', ')}`,
+			);
+		}
 	}
 
 	// Icons are referenced as `file:...` relative to the compiled node.

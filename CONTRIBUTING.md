@@ -63,6 +63,12 @@ same name, and is skipped for pull requests from forks, which cannot read it.
 `@n8n/scan-community-package` against this working tree, with inline
 `eslint-disable` comments ignored exactly as the real review does.
 
+## Branch ownership
+
+Branches are owned by whoever created them. Do not push to, rebase, or merge
+someone else's branch or pull request without asking — this applies to agents
+too, and [AGENTS.md](AGENTS.md) spells out what to do instead.
+
 ## Before opening a pull request
 
 CI runs these on every pull request, so running them locally first is the
@@ -122,14 +128,29 @@ before starting n8n and the node provisions an HTTP destination instead. See
 [How events reach n8n](README.md#how-events-reach-n8n) for what differs between
 the two.
 
+**Uninstalling through the Public API is a one-way door.** n8n's Public API will
+uninstall a community package — `DELETE /api/v1/community-packages/<name>` — but
+refuses to install one that is not on its vetted list:
+`POST /api/v1/community-packages` answers `Package ... is not vetted for
+installation`. The UI has no such check, which is why installing it by hand in
+the first place works. Until this package is verified, treat an API uninstall as
+irreversible from the API: putting it back means the n8n UI (Settings → Community
+nodes), or placing it in `~/.n8n/nodes` and registering it in n8n's database by
+hand. Scripts that tear an instance down and expect to build it back up should
+not use the API for this step.
+
 ## Releasing
 
 Publishing is driven by a **GitHub Release**, not by a tag push and never from a
 laptop. n8n requires community nodes to be published from GitHub Actions with an
 npm provenance statement, so the publish has to happen in CI.
 
-1. Land everything through PRs, including promoting `## [Unreleased]` in
-   [CHANGELOG.md](CHANGELOG.md) to the new version with a date.
+1. Land everything through PRs, including a release PR that sets `version` in
+   [package.json](package.json) to the new version and promotes
+   `## [Unreleased]` in [CHANGELOG.md](CHANGELOG.md) to that same version with a
+   date. Both live in the same PR — the version on `main` is what n8n's
+   verification review compares against npm, and CI fails a version with no
+   matching CHANGELOG section (`scripts/verify-package-load.mjs`).
 2. Check `main` is green.
 3. Draft the release notes. Write them for someone running a workflow: what
    changes for them, and whether they have to do anything.
@@ -142,13 +163,20 @@ npm provenance statement, so the publish has to happen in CI.
    Or use the GitHub UI — Releases → Draft a new release.
 
 Publishing then happens automatically:
-[`publish.yml`](.github/workflows/publish.yml) checks out the tag, takes the
-version from it, re-runs lint, the verification scan, the build, the load check
-and the unit tests, and publishes with provenance. A release marked
-**pre-release** publishes under the `beta` dist-tag instead of `latest`.
+[`publish.yml`](.github/workflows/publish.yml) checks out the tag, **fails if
+the tag does not match `version` in `package.json`**, then re-runs lint, the
+verification scan, the build, the load check and the unit tests, and publishes
+with provenance. A release marked **pre-release** publishes under the `beta`
+dist-tag instead of `latest`.
 
-There is no release commit — the tag is the version, and `package.json` in git
-is not bumped to match.
+`package.json` is the version; the tag only has to agree with it. If the guard
+fails, bump `package.json` on `main` in a PR, then delete the release and its
+tag and create it again — the workflow runs on `release: published`, so editing
+the failed release does not re-run it.
+
+Between releases, `version` in `package.json` is the **last published** version,
+not the next one. That is the state n8n's review expects: `main` and npm
+matching.
 
 ### Choosing the version
 

@@ -151,7 +151,37 @@ test('real deliveries into the node', { skip, concurrency: false }, async (t) =>
 		);
 		assert.ok(accepted.ok, `the edge refused the event: ${accepted.status}`);
 
-		const delivered = await receiver.waitFor(marker, { attempts: 150 });
+		// On timeout, say what Hookdeck actually did. "No delivery arrived" cannot
+		// distinguish an event that was never created, one still queued, one
+		// delivered elsewhere, or a retry rule that never applied — and those need
+		// different fixes. This failure is intermittent and has so far only been
+		// seen in a full run, so the evidence has to be captured when it happens
+		// rather than reproduced afterwards.
+		let delivered;
+		try {
+			delivered = await receiver.waitFor(marker, { attempts: 150 });
+		} catch (error) {
+			const { models: events = [] } = await api(
+				'GET',
+				`/events?source_id=${connection.source.id}&limit=5`,
+			);
+			const seen = [];
+			for (const event of events) {
+				const { models: tries = [] } = await api('GET', `/attempts?event_id=${event.id}&limit=10`);
+				seen.push(
+					`${event.id} ${event.status} [${tries
+						.map((a) => `${a.trigger}:${a.response_status}`)
+						.join(', ')}]`,
+				);
+			}
+			const state = await api('GET', `/connections/${connection.id}`);
+			throw new Error(
+				`${error.message}\n  refusals=${refusals} recorded=${receiver.deliveries.length}` +
+					`\n  connection paused=${state.paused_at} disabled=${state.disabled_at}` +
+					`\n  rules=${JSON.stringify(state.rules)}` +
+					`\n  events=${seen.join(' | ') || 'none'}`,
+			);
+		}
 		receiver.setHandler(null);
 
 		assert.equal(refusals, 1, 'the outage was never exercised');

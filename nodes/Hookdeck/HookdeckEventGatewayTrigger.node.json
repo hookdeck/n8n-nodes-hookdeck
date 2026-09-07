@@ -4,7 +4,7 @@
 	"codexVersion": "1.0",
 	"categories": [
 		"Development",
-		"Developer Tools"
+		"Communication"
 	],
 	"resources": {
 		"credentialDocumentation": [
@@ -17,5 +17,17 @@
 				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#hookdeck-event-gateway-trigger"
 			}
 		]
-	}
+	},
+	"alias": [
+		"Webhook",
+		"Event",
+		"Ingest",
+		"Reverse Proxy",
+		"Tunnel",
+		"Localhost",
+		"Queue",
+		"Retry",
+		"Replay",
+		"Delivery"
+	]
 }
