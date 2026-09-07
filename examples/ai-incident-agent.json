@@ -5,7 +5,7 @@
       "parameters": {
         "source": {
           "__rl": true,
-          "value": "demo-issues",
+          "value": "n8n-example-hookdeck-issues",
           "mode": "name"
         },
         "sourceType": "WEBHOOK",
@@ -21,7 +21,11 @@
         0,
         0
       ],
-      "webhookId": "ff4d2779-6dee-4d07-b869-1dbda34f1cb6"
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
     },
     {
       "parameters": {
@@ -60,7 +64,12 @@
       "position": [
         140,
         240
-      ]
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      }
     },
     {
       "parameters": {
@@ -77,7 +86,12 @@
       "position": [
         380,
         240
-      ]
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
     },
     {
       "parameters": {
@@ -99,7 +113,12 @@
       "position": [
         560,
         240
-      ]
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
     },
     {
       "parameters": {
@@ -116,7 +135,12 @@
       "position": [
         740,
         240
-      ]
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
     },
     {
       "parameters": {},
