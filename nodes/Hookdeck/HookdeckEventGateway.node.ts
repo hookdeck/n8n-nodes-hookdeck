@@ -19,6 +19,8 @@ import {
 } from './descriptions/ActionProperties';
 import { hookdeckApiRequest, hookdeckApiRequestAllItems } from './GenericFunctions';
 import { sanitizeName } from './Naming';
+import { buildSourceConfig } from './ConnectionPayload';
+import type { SourceConfigContext } from './ConnectionPayload';
 
 /**
  * Programmatic style is used rather than declarative because several operations
@@ -244,18 +246,24 @@ async function executeOperation(
 			const existing = await hookdeckApiRequestAllItems.call(this, basePath, { name }, 1);
 			if (existing.length > 0) return [existing[0]];
 
-			const body: IDataObject = { name, type: this.getNodeParameter('sourceType', i) as string };
+			const sourceType = this.getNodeParameter('sourceType', i) as string;
 
-			const raw = this.getNodeParameter('sourceConfigJson', i, '') as string | IDataObject;
-			if (raw) {
-				try {
-					body.config = typeof raw === 'string' ? (JSON.parse(raw) as IDataObject) : raw;
-				} catch {
-					throw new NodeOperationError(this.getNode(), 'Source Config (JSON) is not valid JSON', {
-						itemIndex: i,
-					});
-				}
-			}
+			// The same builder the trigger uses, so a source created here is
+			// configured exactly like one the trigger provisions. `buildSourceConfig`
+			// reads parameters without an item index, which is right for the trigger
+			// and wrong here, so it gets a shim that supplies ours.
+			const sourceContext: SourceConfigContext = {
+				getNode: () => this.getNode(),
+				getNodeParameter: (parameterName, fallback) =>
+					this.getNodeParameter(parameterName, i, fallback),
+			};
+
+			const config = buildSourceConfig.call(sourceContext, sourceType, {
+				sourceConfigJson: this.getNodeParameter('sourceConfigJson', i, '') as string,
+			});
+
+			const body: IDataObject = { name, type: sourceType };
+			if (Object.keys(config).length > 0) body.config = config;
 
 			return [await hookdeckApiRequest.call(this, 'POST', basePath, body)];
 		}

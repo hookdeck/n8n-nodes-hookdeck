@@ -26,7 +26,7 @@ const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
  * schemes, and one taking no secret — and each is refused with the guidance that
  * fits it, rather than being allowed through to surface as a 422.
  */
-function platformAuthField(this: IHookFunctions, sourceType: string): string {
+function platformAuthField(this: SourceConfigContext, sourceType: string): string {
 	const shape = SOURCE_TYPE_AUTH[sourceType];
 
 	// Not in the map at all: an unknown or newer type. The common field is the
@@ -74,8 +74,22 @@ function platformAuthField(this: IHookFunctions, sourceType: string): string {
  * Platform source types carry their own verification scheme, so they only need
  * the secret. The generic `WEBHOOK` type spells the scheme out explicitly.
  */
+/**
+ * What `buildSourceConfig` and `platformAuthField` need from their caller.
+ *
+ * Deliberately narrower than `IHookFunctions`. The trigger calls these while
+ * provisioning, where parameters are read without an item index; the action
+ * node calls them from `execute`, where they are read *with* one. Typing the
+ * context structurally lets the action node pass a small shim that closes over
+ * its item index, instead of this file having to know which node it is serving.
+ */
+export type SourceConfigContext = {
+	getNode: IHookFunctions['getNode'];
+	getNodeParameter(name: string, fallback?: unknown): unknown;
+};
+
 export function buildSourceConfig(
-	this: IHookFunctions,
+	this: SourceConfigContext,
 	sourceType: string,
 	options: IDataObject,
 ): IDataObject {

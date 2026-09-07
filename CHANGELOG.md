@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Source → Get or Create** on the Hookdeck Event Gateway node now asks the
+  same questions the trigger does: Source Type, Verification, and the labelled
+  secret fields for HMAC, API key, basic auth and platform schemes. Creating a
+  verified Stripe source used to mean hand-writing
+  `{"auth_type":"STRIPE","auth":{"webhook_secret_key":"..."}}` into Source
+  Config (JSON), while the trigger two nodes away had a field for it. Source
+  Config (JSON) is still there for schemes the fields cannot express, and still
+  wins where they overlap.
+
 ## [0.2.1] - 2026-09-02
 
 ### Fixed
@@ -37,7 +48,6 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Delivery Group Key** says in its description that delivery groups are an
   early access feature, and what publishing does if your organization does not
   have them. Previously the first sign was a failed publish.
-
 ## [0.2.0] - 2026-08-21
 
 ### Changed
