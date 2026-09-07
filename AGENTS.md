@@ -26,9 +26,14 @@ and rarely what you are reading the code for.
 
 ## Things that will cost you an hour if you do not know them
 
-**The version comes from the git tag.** Never change `version` in
-`package.json`. There is no release commit. `publish.yml` sets the version from
-the tag on a published GitHub Release.
+**The version lives in `package.json`, and the tag has to agree with it.** A
+release PR bumps `version` and promotes `## [Unreleased]` in `CHANGELOG.md` in
+the same commit; `publish.yml` then refuses a release tag that disagrees, and
+`verify-package-load.mjs` refuses a version with no CHANGELOG section. Between
+releases `version` is the **last published** version, not the next one. This was
+the other way round until 0.2.1 — the workflow took the version from the tag, so
+`main` sat at 0.1.0 while npm served 0.2.0 and no commit recorded what anyone
+was installing, which is what n8n's verification review sent back.
 
 **`npm run scan` is the gate that matters.** It runs the same rules n8n runs for
 verification, and **it ignores inline `eslint-disable` comments** — verified,
