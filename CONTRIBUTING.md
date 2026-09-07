@@ -63,6 +63,12 @@ same name, and is skipped for pull requests from forks, which cannot read it.
 `@n8n/scan-community-package` against this working tree, with inline
 `eslint-disable` comments ignored exactly as the real review does.
 
+## Branch ownership
+
+Branches are owned by whoever created them. Do not push to, rebase, or merge
+someone else's branch or pull request without asking — this applies to agents
+too, and [AGENTS.md](AGENTS.md) spells out what to do instead.
+
 ## Before opening a pull request
 
 CI runs these on every pull request, so running them locally first is the
