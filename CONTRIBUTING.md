@@ -5,7 +5,7 @@ infrastructure in someone's Hookdeck project on workflow activation, so most of
 the care here is about what happens on the boundary — activation, deactivation,
 and an inbound delivery — rather than about the code shape.
 
-[README.md](README.md) documents the nodes from a user's point of view. This
+[README.md](README.md) and [docs/](docs/) document the nodes from a user's point of view. This
 file covers building, testing and releasing them.
 
 ## Layout
@@ -125,7 +125,7 @@ hookdeck listen 5678 <source> --device-name n8n-<host>-<instance>
 
 A tunnel still works if you prefer one — set `WEBHOOK_URL` to the public address
 before starting n8n and the node provisions an HTTP destination instead. See
-[How events reach n8n](README.md#how-events-reach-n8n) for what differs between
+[Transport](docs/transport.md) for what differs between
 the two.
 
 **Uninstalling through the Public API is a one-way door.** n8n's Public API will

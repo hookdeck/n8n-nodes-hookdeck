@@ -151,7 +151,7 @@ are an agent reading this: the rules above are still the rules.
 | For | Read |
 | --- | --- |
 | Commands, checklist, releasing, local n8n | [CONTRIBUTING.md](CONTRIBUTING.md) |
-| What the nodes do, from a user's view | [README.md](README.md) |
+| What the nodes do, from a user's view | [README.md](README.md), then [docs/](docs/) |
 | Cutting a release, choosing the version | `skills/n8n-nodes-hookdeck-release/SKILL.md` |
 | Generic n8n node-building guidance | `.agents/*.md` (upstream n8n scaffold) |
 
