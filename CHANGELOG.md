@@ -6,6 +6,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- The trigger says, while you are configuring it, when it will not apply the
+  source settings you are looking at. Picking an existing source from the list
+  adopts it exactly as Hookdeck has it — Source Type, Verification and the
+  secret fields are ignored unless **Options → Update Existing Source** is on —
+  and the only sign of that used to be a warning logged after publish. The
+  fields stay editable rather than being greyed out or hidden, because n8n
+  resets a greyed-out field to its default and drops a hidden one when the
+  workflow saves, and either would take a webhook secret you had just typed.
+
 ### Added
 
 - **Source → Get or Create** on the Hookdeck Event Gateway node now asks the

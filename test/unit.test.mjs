@@ -1766,6 +1766,66 @@ test('an exact count comes from the count endpoint, never a list', async () => {
 	}
 });
 
+test('the trigger says up front when it will not apply the source fields', async () => {
+	// #14: the fields were editable and looked saved while being ignored, and the
+	// only signal was a warning logged after publish. The notice appears the
+	// moment a source is picked from the list, which is the one case the editor
+	// can be certain about — a source given by name may be created or adopted,
+	// and nothing on screen knows which.
+	const { HookdeckEventGatewayTrigger } = await import(
+		'../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js'
+	);
+	const props = new HookdeckEventGatewayTrigger().description.properties;
+
+	const notice = props.find((p) => p.name === 'existingSourceNotice');
+	assert.equal(notice?.type, 'notice');
+	assert.deepEqual(
+		notice.displayOptions,
+		{
+			show: { 'source.mode': ['list'] },
+			hide: { 'options.updateExistingSource': [true] },
+		},
+		'shown when the source exists and this node is not reconfiguring it',
+	);
+	assert.match(notice.displayName, /Update Existing Source/, 'the notice names the way out');
+
+	const sourceType = props.findIndex((p) => p.name === 'sourceType');
+	assert.ok(
+		props.findIndex((p) => p.name === 'existingSourceNotice') < sourceType,
+		'the notice is above the fields it is about',
+	);
+});
+
+test('no source field is greyed out or hidden, because either would delete it', async () => {
+	// `disabledOptions` resets a parameter to its default when it becomes
+	// read-only (ParameterInputFull.vue watches isReadOnly), and a hidden
+	// parameter is dropped by getNodeParameters when the workflow saves. Both
+	// would take a webhook secret away from someone who switched the Source
+	// picker to "From list". Regression guard: this is a tempting change.
+	const { HookdeckEventGatewayTrigger } = await import(
+		'../dist/nodes/Hookdeck/HookdeckEventGatewayTrigger.node.js'
+	);
+	const { HookdeckEventGateway } = await import(
+		'../dist/nodes/Hookdeck/HookdeckEventGateway.node.js'
+	);
+	const sourceFields = ['sourceType', 'verification', 'hmacSecret', 'platformSecret', 'apiKeyValue'];
+
+	for (const [label, instance] of [
+		['trigger', new HookdeckEventGatewayTrigger()],
+		['action node', new HookdeckEventGateway()],
+	]) {
+		for (const name of sourceFields) {
+			const field = instance.description.properties.find((p) => p.name === name);
+			if (!field) continue;
+			assert.equal(field.disabledOptions, undefined, `${label}: ${name} is not greyed out`);
+			assert.ok(
+				!field.displayOptions?.hide?.['options.updateExistingSource'],
+				`${label}: ${name} is not hidden by the update checkbox`,
+			);
+		}
+	}
+});
+
 test('Source > Get or Create builds verification from the fields, not just JSON', async () => {
 	// Parity with the trigger. Before these fields were shared, creating a
 	// verified Stripe source from the action node meant hand-writing

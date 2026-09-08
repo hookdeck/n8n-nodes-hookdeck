@@ -4,6 +4,29 @@ import { HOOKDECK_DASHBOARD_URL } from '../GenericFunctions';
 import { sourceConfigProperties } from './SourceProperties';
 
 /**
+ * True exactly when the source below already exists and this node is not going
+ * to reconfigure it — so the source fields are on screen but inert.
+ *
+ * `source.mode` is `list` only when the source was picked from Hookdeck, which
+ * means it exists. The `name` mode cannot be judged here: it creates the source
+ * if the name is free and adopts it if it is taken, and nothing in the editor
+ * knows which. That case keeps the warning the node logs on publish.
+ *
+ * `show` is AND-ed across its keys, so "picked from the list OR opted in" is not
+ * expressible in one clause. `show` and `hide` are evaluated together, which is:
+ * picked from the list, and Update Existing Source not turned on. The dotted key
+ * reads into the Options collection where that checkbox lives — n8n resolves
+ * these with lodash `get`, so it does not have to be lifted out.
+ *
+ * This drives a notice and nothing else. Greying the fields out or hiding them
+ * both delete what is in them — see `SourceProperties.ts`.
+ */
+const ADOPTING_AN_EXISTING_SOURCE = {
+	show: { 'source.mode': ['list'] },
+	hide: { 'options.updateExistingSource': [true] },
+};
+
+/**
  * UI for the Hookdeck Trigger.
  *
  * Kept apart from the node itself so the lifecycle — provisioning, teardown and
@@ -66,6 +89,17 @@ export const triggerProperties: INodeProperties[] = [
 					],
 				},
 			],
+		},
+		{
+			// The fix for the fields below looking saved while being ignored. It
+			// appears the moment a source is picked from the list, rather than as a
+			// log line after publish, which was the only signal before.
+			displayName:
+				'This source already exists, so it is used exactly as configured in Hookdeck and the fields below are not applied. To change it here instead, turn on <b>Options → Update Existing Source</b> — that reconfigures the source for every connection using it.',
+			name: 'existingSourceNotice',
+			type: 'notice',
+			default: '',
+			displayOptions: ADOPTING_AN_EXISTING_SOURCE,
 		},
 		...sourceConfigProperties(),
 		{
