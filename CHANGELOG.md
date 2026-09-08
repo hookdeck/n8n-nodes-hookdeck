@@ -17,6 +17,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Config (JSON) is still there for schemes the fields cannot express, and still
   wins where they overlap.
 
+### Changed
+
+- The README now covers what the package is, why you would use it and how to
+  get started; the reference material it used to carry (every trigger option,
+  the CLI route, signature verification, the action node's operations and the
+  reliability contract) moved to `docs/`. The documentation links on both
+  nodes and on the credential now point at those pages rather than README
+  anchors that no longer exist.
+
 ## [0.2.1] - 2026-09-02
 
 ### Fixed

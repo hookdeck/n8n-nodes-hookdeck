@@ -9,12 +9,12 @@
 	"resources": {
 		"credentialDocumentation": [
 			{
-				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#credentials"
+				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck/blob/main/docs/getting-started.md#credentials"
 			}
 		],
 		"primaryDocumentation": [
 			{
-				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck?tab=readme-ov-file#hookdeck-event-gateway-trigger"
+				"url": "https://github.com/hookdeck/n8n-nodes-hookdeck/blob/main/docs/trigger.md"
 			}
 		]
 	},
