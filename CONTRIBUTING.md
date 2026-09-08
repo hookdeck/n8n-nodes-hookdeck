@@ -185,6 +185,11 @@ type, the credential type and every parameter name inside the user's workflow
 JSON, so renaming any of them detaches existing workflows without failing a
 build. That is a MAJOR change, whatever it looks like in the diff.
 
+**While this package is pre-1.0, a breaking change is a MINOR bump**, not a
+MAJOR one — 0.x is the beta, and MAJOR is reserved for 1.0.0 onwards. The table
+below is what the change *is*; read MAJOR as "MINOR, and say so loudly at the
+top of the release notes" until 1.0.0.
+
 | Change | Bump |
 | --- | --- |
 | Renamed or removed node type, credential type, parameter, resource or operation; changed output item shape; a default that alters delivery behaviour | MAJOR |

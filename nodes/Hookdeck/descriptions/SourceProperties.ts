@@ -20,6 +20,21 @@ import { SOURCE_TYPE_OPTIONS } from '../SourceTypes';
  * `extraShow` is merged into every field's `displayOptions.show`. The trigger
  * shows these unconditionally; the action node needs them gated on its resource
  * and operation, and n8n has no way to express that from the outside.
+ *
+ * These stay editable even when the trigger will not apply them — when a source
+ * picked from the list already exists and Update Existing Source is off. Both
+ * ways of showing that in the UI destroy what the user typed:
+ *
+ *   - `disabledOptions` greys a field out, and `ParameterInputFull.vue` watches
+ *     that transition and resets any parameter carrying `disabledOptions` to its
+ *     default. Switching the Source picker to "From list" would wipe a webhook
+ *     secret typed a moment earlier.
+ *   - `displayOptions.hide` loses it too, later: `getNodeParameters` skips
+ *     parameters that are not displayed, so the values go when the workflow is
+ *     saved.
+ *
+ * So the fields stay as they are and a notice above them says they will not be
+ * applied. A confusing field is worth more than a deleted secret.
  */
 export function sourceConfigProperties(extraShow: ShowConditions = {}): INodeProperties[] {
 	const fields: INodeProperties[] = [
