@@ -1782,11 +1782,22 @@ test('the trigger says up front when it will not apply the source fields', async
 	assert.deepEqual(
 		notice.displayOptions,
 		{
-			show: { 'source.mode': ['list'] },
+			show: {
+				'source.mode': ['list'],
+				// Not on mode alone: switching to "From list" before choosing
+				// anything would have the notice claim a source exists when none is
+				// picked, which is what it looked like on screen.
+				'source.value': [{ _cnd: { exists: true } }],
+			},
 			hide: { 'options.updateExistingSource': [true] },
 		},
-		'shown when the source exists and this node is not reconfiguring it',
+		'shown when a source has actually been picked and this node is not reconfiguring it',
 	);
+
+	// The setup notice is directions to a source that exists. Once the picker is
+	// on "From list" the reader is there, and two notices stack in one panel.
+	const setup = props.find((p) => p.name === 'setupNotice');
+	assert.deepEqual(setup.displayOptions, { hide: { 'source.mode': ['list'] } });
 	assert.match(notice.displayName, /Update Existing Source/, 'the notice names the way out');
 
 	const sourceType = props.findIndex((p) => p.name === 'sourceType');

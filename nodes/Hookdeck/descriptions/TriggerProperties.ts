@@ -1,4 +1,4 @@
-import type { INodeProperties } from 'n8n-workflow';
+import type { IDisplayOptions, INodeProperties } from 'n8n-workflow';
 
 import { HOOKDECK_DASHBOARD_URL } from '../GenericFunctions';
 import { sourceConfigProperties } from './SourceProperties';
@@ -21,8 +21,16 @@ import { sourceConfigProperties } from './SourceProperties';
  * This drives a notice and nothing else. Greying the fields out or hiding them
  * both delete what is in them — see `SourceProperties.ts`.
  */
-const ADOPTING_AN_EXISTING_SOURCE = {
-	show: { 'source.mode': ['list'] },
+const ADOPTING_AN_EXISTING_SOURCE: IDisplayOptions = {
+	show: {
+		'source.mode': ['list'],
+		// Mode alone is not enough. Switching to "From list" before choosing
+		// anything leaves the value empty, and the notice would be claiming a
+		// source exists when none has been picked. `exists` rejects '', null and
+		// undefined, which covers both the empty selection and a resourceLocator
+		// that has no value key yet.
+		'source.value': [{ _cnd: { exists: true } }],
+	},
 	hide: { 'options.updateExistingSource': [true] },
 };
 
@@ -48,6 +56,13 @@ export const triggerProperties: INodeProperties[] = [
 			name: 'setupNotice',
 			type: 'notice',
 			default: '',
+			// This is directions to a source that exists. Once the picker is on
+			// "From list" the reader is already there, and the rest of the sentence
+			// points at a mode they are not in — while taking up the top of the
+			// panel next to a second notice.
+			displayOptions: {
+				hide: { 'source.mode': ['list'] },
+			},
 		},
 		{
 			displayName: 'Source',
