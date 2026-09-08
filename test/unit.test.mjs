@@ -1766,6 +1766,34 @@ test('an exact count comes from the count endpoint, never a list', async () => {
 	}
 });
 
+test('live cleanup recognises every name the node and the harness create', async () => {
+	// This filter has now missed a name shape twice. Connections were the first:
+	// they survived cleanup and blocked their source from being deleted, which at
+	// least failed loudly. Destinations were the second and went unnoticed for
+	// longer, because nothing blocks on a leaked destination — one run measured
+	// them going 27 to 39 while sources and connections stayed level.
+	//
+	// Built with the node's own naming function rather than hand-written strings,
+	// so renaming a resource breaks this test rather than silently un-sweeping it.
+	const { ownedByThisRun, RUN_ID, PREFIX } = await import('./live/_harness.mjs');
+	const { buildResourceName } = await import('../dist/nodes/Hookdeck/Naming.js');
+
+	for (const isTest of [false, true]) {
+		for (const prefix of ['n8n', 'n8n-dest']) {
+			const name = buildResourceName(prefix, RUN_ID, 'nodeid', isTest);
+			assert.ok(ownedByThisRun(name), `cleanup would miss ${name}`);
+		}
+	}
+	assert.ok(ownedByThisRun(`${PREFIX}-source`), 'fixtures the harness names itself');
+	assert.ok(ownedByThisRun(`cli-${PREFIX}-dest`), 'the CLI destination shape');
+
+	// The guard is load bearing: the project under test also holds production
+	// resources, and every accepted shape has to carry this run's id.
+	assert.equal(ownedByThisRun('demo-stripe'), false, 'a real source is never swept');
+	assert.equal(ownedByThisRun('n8n-dest-otherrun-nodeid'), false, "another run's destination");
+	assert.equal(ownedByThisRun(undefined), false);
+});
+
 test('the trigger says up front when it will not apply the source fields', async () => {
 	// #14: the fields were editable and looked saved while being ignored, and the
 	// only signal was a warning logged after publish. The notice appears the
