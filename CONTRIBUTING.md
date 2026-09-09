@@ -62,12 +62,15 @@ same name, and is skipped for pull requests from forks, which cannot read it.
 Two of its suites need a CLI and skip without one, naming the reason:
 
 - **`delivery`** drives `hookdeck listen`, and needs the **Hookdeck CLI 2.5.0 or
-  later**. You do not have to log it in or run `hookdeck ci` first: the harness
-  passes `HOOKDECK_API_KEY` into the CLI's environment, so it forwards from the
-  project the tests use whatever the machine is logged into. 2.5.0 is the floor
-  because earlier versions ignore that variable, and `--local` — the documented
-  way to pin a project — also rewrites the *global* config on them
-  ([hookdeck-cli#332](https://github.com/hookdeck/hookdeck-cli/issues/332)).
+  later**. You do not have to log it in first, and it will not touch the login
+  you already have: the harness runs `hookdeck ci` against a config file in a
+  temp directory, keyed to the run, and points `hookdeck listen` at the same
+  file. `HOOKDECK_API_KEY` is not enough on its own — `hookdeck listen` resolves
+  `--cli-key`, then stored credentials, *then* the variable, so a machine logged
+  into another project ignores it. 2.5.0 is the floor because that is where
+  `--local` stopped rewriting the global config
+  ([hookdeck-cli#332](https://github.com/hookdeck/hookdeck-cli/issues/332)),
+  which is the era this scoping is trusted from.
 - **`stripe`** needs the Stripe CLI authenticated against a **test-mode**
   account, either `stripe login` or `STRIPE_API_KEY`. It creates a real webhook
   endpoint, so a live-mode key is refused rather than used.

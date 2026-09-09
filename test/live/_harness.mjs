@@ -18,6 +18,9 @@ import { createServer } from 'node:http';
 import { spawn, spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { once } from 'node:events';
+import { rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { dirname, join } from 'node:path';
 
 export const API_KEY = process.env.HOOKDECK_EG_API_KEY;
 export const BASE_URL = 'https://api.hookdeck.com/2025-07-01';
@@ -25,6 +28,50 @@ export const skip = API_KEY ? false : 'HOOKDECK_EG_API_KEY is not set';
 
 export const RUN_ID = randomBytes(4).toString('hex');
 export const PREFIX = `n8n-live-${RUN_ID}`;
+
+/**
+ * A CLI config file this run owns.
+ *
+ * `hookdeck listen` resolves credentials as `--cli-key`, then stored
+ * credentials, then `HOOKDECK_API_KEY` — so a machine logged into another
+ * project ignores the variable, and the listener forwards from the wrong place
+ * while the tests provision in the right one. That failure surfaces 60 seconds
+ * later as `hookdeck listen did not report a source URL`, which reads as the
+ * node being broken.
+ *
+ * Giving the CLI a config of our own means there are no stored credentials to
+ * outrank anything. It also leaves `~/.config/hookdeck` alone: before 2.5.0 the
+ * documented way to scope a project, `--local`, rewrote the global config
+ * (hookdeck-cli#332), which is a rude thing for a test suite to do to someone's
+ * machine.
+ */
+const CLI_CONFIG = join(tmpdir(), `hookdeck-cli-${RUN_ID}`, 'config.toml');
+
+let cliAuthenticated = false;
+
+/** Put this project's credentials in our own config. Idempotent per run. */
+function authenticateCli() {
+	if (cliAuthenticated) return;
+
+	const result = spawnSync(
+		'hookdeck',
+		['ci', '--api-key', API_KEY, '--hookdeck-config', CLI_CONFIG],
+		{ encoding: 'utf8' },
+	);
+	if (result.status !== 0) {
+		// Deliberately does not echo the command: it carries the API key.
+		const detail = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim().split('\n')[0];
+		throw new Error(`hookdeck ci could not authenticate the test project: ${detail}`);
+	}
+
+	cliAuthenticated = true;
+}
+
+/** Remove the config this run created. Safe to call when none was made. */
+export function forgetCliCredentials() {
+	rmSync(dirname(CLI_CONFIG), { recursive: true, force: true });
+	cliAuthenticated = false;
+}
 
 /**
  * Call the Hookdeck API directly, to arrange fixtures and assert real state.
@@ -107,6 +154,10 @@ export async function cleanUpRun() {
 		const { models = [] } = await api('GET', `/${kind}?limit=250`);
 		await sweep(kind, models);
 	}
+
+	// The CLI credentials this run wrote are a resource too, and they are a
+	// project API key sitting in a temp file.
+	forgetCliCredentials();
 
 	if (leaked.length) {
 		console.error(`\n  LEAKED ${leaked.length} resource(s) in the project:`);
@@ -267,12 +318,14 @@ export function hasCommand(name) {
 }
 
 /**
- * The lowest Hookdeck CLI that honours `HOOKDECK_API_KEY` in `hookdeck listen`.
+ * The lowest Hookdeck CLI this suite is known to work against.
  *
- * Below this the CLI forwards from whichever project it was last logged into,
- * and `--local` — the documented way to pin one — also rewrites the *global*
- * config (hookdeck-cli#332), so the flag meant to isolate a checkout instead
- * changes the machine.
+ * Not a capability boundary that has been tested from both sides — it is the
+ * version the config scoping above was verified on. What is known about earlier
+ * ones is that project scoping was unreliable there: `--local`, the documented
+ * way to pin a project, also rewrote the *global* config until 2.5.0
+ * (hookdeck-cli#332). Refusing to run below the version we have evidence for
+ * beats discovering the difference through five timed-out subtests.
  */
 const MIN_HOOKDECK_CLI = [2, 5, 0];
 
@@ -303,7 +356,7 @@ export function hookdeckCliSkipReason() {
 	// Compare on the first component that differs. Comparing each independently
 	// would read 3.0.0 as older than 2.5.0, because its minor is lower.
 	if (isOlderThan(version, MIN_HOOKDECK_CLI)) {
-		return `the Hookdeck CLI is ${found[0]}; ${MIN_HOOKDECK_CLI.join('.')} or later is needed so HOOKDECK_API_KEY pins the project`;
+		return `the Hookdeck CLI is ${found[0]}; this suite is verified against ${MIN_HOOKDECK_CLI.join('.')} or later, where pinning a project does not rewrite your global config`;
 	}
 
 	return false;
@@ -426,20 +479,30 @@ export async function startCliReceiver(HookdeckEventGatewayTrigger, sourceName) 
 	// --no-healthcheck: the retry test answers 503 on purpose, and a health check
 	// reads that as the origin being down and stops forwarding — which shows up
 	// as a retry that never arrives rather than as anything to do with the node.
-	// HOOKDECK_API_KEY pins the CLI to the same project these tests use. Without
-	// it the CLI forwards from whichever project it was last logged into, and
-	// pointing it elsewhere fails as `hookdeck listen did not report a source
-	// URL` after 60 seconds — which looks like the node, not the CLI. It also
-	// makes the suite runnable somewhere with no CLI config at all, such as CI.
 	//
-	// Honoured from 2.5.0, which `hookdeckCliSkipReason` requires.
+	// --hookdeck-config is what pins the project. `hookdeck listen --help` gives
+	// the auth order as `--cli-key`, then stored credentials, then
+	// HOOKDECK_API_KEY — so stored credentials *outrank* the variable, and on a
+	// machine logged into another project setting it changes nothing. Pointing
+	// the CLI at a config this run owns means there are no stored credentials to
+	// outrank it, and `authenticateCli` has already put the test project's
+	// credentials there.
+	authenticateCli();
 	const cli = spawn(
 		'hookdeck',
-		['listen', String(port), sourceName, '--output', 'compact', '--no-healthcheck'],
+		[
+			'listen',
+			String(port),
+			sourceName,
+			'--output',
+			'compact',
+			'--no-healthcheck',
+			'--hookdeck-config',
+			CLI_CONFIG,
+		],
 		{
 			stdio: ['ignore', 'pipe', 'pipe'],
 			detached: true,
-			env: { ...process.env, HOOKDECK_API_KEY: API_KEY },
 		},
 	);
 	const ingestUrl = await new Promise((resolve, reject) => {
