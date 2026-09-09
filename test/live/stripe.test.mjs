@@ -32,18 +32,65 @@ import {
 
 const run = promisify(execFile);
 
-/** Whether the Stripe CLI is present and authenticated. */
-async function stripeReady() {
+/**
+ * Why this suite is being skipped, or `false` if it can run.
+ *
+ * It asks Stripe, rather than reading the config. The previous check grepped
+ * `stripe config --list` for a key, which says a key was configured at some
+ * point and nothing about whether it still works: an expired key leaves the
+ * config intact, so the suite ran and died on `The API key provided has
+ * expired`. Measured once as 46 tests, 43 pass, 2 fail, both environmental and
+ * neither about the node.
+ *
+ * `events list` is the cheapest authenticated read there is, and it also covers
+ * `STRIPE_API_KEY` — the CLI resolves that itself, which is the auth path a CI
+ * runner would use, and which the old config grep could never have seen.
+ *
+ * The reason matters as much as the skip. "Not logged in" sent people to
+ * `stripe login` when the real problem was a key that had lapsed, or a live-mode
+ * key that this suite must refuse.
+ */
+async function stripeSkipReason() {
+	// Live mode would have this suite create a real webhook endpoint on a real
+	// account. Checked before anything is called, because the failure it prevents
+	// is not one you get to undo.
+	const envKey = process.env.STRIPE_API_KEY;
+	if (envKey && /^(sk|rk)_live_/.test(envKey)) {
+		return 'STRIPE_API_KEY is a live-mode key — this suite creates webhook endpoints, so it needs a test-mode key';
+	}
+
+	try {
+		await run('stripe', ['events', 'list', '--limit', '1']);
+	} catch (error) {
+		if (error.code === 'ENOENT') return 'the Stripe CLI is not installed';
+
+		const output = `${error.stdout ?? ''}${error.stderr ?? ''}`;
+		if (/expired/i.test(output)) return 'the Stripe CLI key has expired — run `stripe login`';
+		if (/invalid[_ ]api[_ ]key/i.test(output)) return 'the Stripe CLI key is invalid — run `stripe login`';
+		if (/not logged in|no api key/i.test(output)) return 'the Stripe CLI is not logged in — run `stripe login`';
+
+		const firstLine = output.trim().split('\n')[0] || error.message;
+		return `the Stripe CLI could not reach Stripe: ${firstLine}`;
+	}
+
+	if (envKey) return false;
+
+	// Without STRIPE_API_KEY the CLI used a stored profile, and `events list`
+	// succeeds against either mode. Which one it took is only visible here.
 	try {
 		const { stdout } = await run('stripe', ['config', '--list']);
-		// An authenticated profile carries a key; a bare profile block does not.
-		return /test_mode_api_key|live_mode_api_key|device_name/.test(stdout);
+		if (/live_mode_api_key/.test(stdout) && !/test_mode_api_key/.test(stdout)) {
+			return 'the Stripe CLI is logged in against a live-mode account — this suite creates webhook endpoints, so it needs test mode';
+		}
 	} catch {
-		return false;
+		// The authenticated call already succeeded; a config read that fails tells
+		// us nothing more, and is not a reason to skip.
 	}
+
+	return false;
 }
 
-const skip = noApiKey || ((await stripeReady()) ? false : 'the Stripe CLI is not logged in');
+const skip = noApiKey || (await stripeSkipReason());
 
 test('a genuine Stripe webhook', { skip, concurrency: false }, async (t) => {
 	const sourceName = `${PREFIX}-stripe-real`;

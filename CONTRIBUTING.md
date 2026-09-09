@@ -59,6 +59,22 @@ destinations and connections — point it at a throwaway Event Gateway project,
 never one carrying live traffic. In CI it runs from a repository secret of the
 same name, and is skipped for pull requests from forks, which cannot read it.
 
+Two of its suites need a CLI and skip without one, naming the reason:
+
+- **`delivery`** drives `hookdeck listen`, and needs the **Hookdeck CLI 2.5.0 or
+  later**. You do not have to log it in first, and it will not touch the login
+  you already have: the harness runs `hookdeck ci` against a config file in a
+  temp directory, keyed to the run, and points `hookdeck listen` at the same
+  file. `HOOKDECK_API_KEY` is not enough on its own — `hookdeck listen` resolves
+  `--cli-key`, then stored credentials, *then* the variable, so a machine logged
+  into another project ignores it. 2.5.0 is the floor because that is where
+  `--local` stopped rewriting the global config
+  ([hookdeck-cli#332](https://github.com/hookdeck/hookdeck-cli/issues/332)),
+  which is the era this scoping is trusted from.
+- **`stripe`** needs the Stripe CLI authenticated against a **test-mode**
+  account, either `stripe login` or `STRIPE_API_KEY`. It creates a real webhook
+  endpoint, so a live-mode key is refused rather than used.
+
 `npm run scan` is the one that matters before submitting: it runs
 `@n8n/scan-community-package` against this working tree, with inline
 `eslint-disable` comments ignored exactly as the real review does.
