@@ -1766,6 +1766,21 @@ test('an exact count comes from the count endpoint, never a list', async () => {
 	}
 });
 
+test('the CLI version gate compares versions, not digits', async () => {
+	// The first cut of this compared each component independently, which reads
+	// 3.0.0 as older than 2.5.0 because its minor is lower — so a newer CLI would
+	// have skipped the delivery suite with a message saying it was too old.
+	const { isOlderThan } = await import('./live/_harness.mjs');
+	const min = [2, 5, 0];
+
+	assert.equal(isOlderThan([2, 4, 9], min), true, '2.4.9 is older');
+	assert.equal(isOlderThan([1, 9, 9], min), true, '1.9.9 is older');
+	assert.equal(isOlderThan([2, 5, 0], min), false, 'the minimum itself passes');
+	assert.equal(isOlderThan([2, 5, 1], min), false, '2.5.1 is newer');
+	assert.equal(isOlderThan([3, 0, 0], min), false, '3.0.0 is newer despite a lower minor');
+	assert.equal(isOlderThan([10, 0, 0], min), false, 'double digits are numbers, not strings');
+});
+
 test('the trigger says up front when it will not apply the source fields', async () => {
 	// #14: the fields were editable and looked saved while being ignored, and the
 	// only signal was a warning logged after publish. The notice appears the

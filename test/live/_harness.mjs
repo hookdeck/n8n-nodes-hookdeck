@@ -266,6 +266,49 @@ export function hasCommand(name) {
 	return probe.status === 0;
 }
 
+/**
+ * The lowest Hookdeck CLI that honours `HOOKDECK_API_KEY` in `hookdeck listen`.
+ *
+ * Below this the CLI forwards from whichever project it was last logged into,
+ * and `--local` — the documented way to pin one — also rewrites the *global*
+ * config (hookdeck-cli#332), so the flag meant to isolate a checkout instead
+ * changes the machine.
+ */
+const MIN_HOOKDECK_CLI = [2, 5, 0];
+
+/** Semver-style compare on the first component that differs. Exported to be tested. */
+export function isOlderThan(version, minimum) {
+	for (let i = 0; i < minimum.length; i++) {
+		if (version[i] !== minimum[i]) return version[i] < minimum[i];
+	}
+	return false;
+}
+
+/**
+ * Why the Hookdeck CLI cannot be used, or `false` if it can.
+ *
+ * Checking the version rather than only the binary is the difference between a
+ * named skip and five subtests each timing out after 60 seconds on `hookdeck
+ * listen did not report a source URL` — which reads as the node being broken
+ * rather than the CLI pointing somewhere else.
+ */
+export function hookdeckCliSkipReason() {
+	if (!hasCommand('hookdeck')) return 'the Hookdeck CLI is not installed';
+
+	const probe = spawnSync('hookdeck', ['version'], { encoding: 'utf8' });
+	const found = `${probe.stdout ?? ''}${probe.stderr ?? ''}`.match(/(\d+)\.(\d+)\.(\d+)/);
+	if (!found) return 'the Hookdeck CLI version could not be read from `hookdeck version`';
+
+	const version = found.slice(1, 4).map(Number);
+	// Compare on the first component that differs. Comparing each independently
+	// would read 3.0.0 as older than 2.5.0, because its minor is lower.
+	if (isOlderThan(version, MIN_HOOKDECK_CLI)) {
+		return `the Hookdeck CLI is ${found[0]}; ${MIN_HOOKDECK_CLI.join('.')} or later is needed so HOOKDECK_API_KEY pins the project`;
+	}
+
+	return false;
+}
+
 /** An IWebhookFunctions over a real inbound request. */
 export function liveWebhookContext({ rawBody, headers, staticData, options = {}, params = {} }) {
 	const sent = {};
@@ -383,12 +426,20 @@ export async function startCliReceiver(HookdeckEventGatewayTrigger, sourceName) 
 	// --no-healthcheck: the retry test answers 503 on purpose, and a health check
 	// reads that as the origin being down and stops forwarding — which shows up
 	// as a retry that never arrives rather than as anything to do with the node.
+	// HOOKDECK_API_KEY pins the CLI to the same project these tests use. Without
+	// it the CLI forwards from whichever project it was last logged into, and
+	// pointing it elsewhere fails as `hookdeck listen did not report a source
+	// URL` after 60 seconds — which looks like the node, not the CLI. It also
+	// makes the suite runnable somewhere with no CLI config at all, such as CI.
+	//
+	// Honoured from 2.5.0, which `hookdeckCliSkipReason` requires.
 	const cli = spawn(
 		'hookdeck',
 		['listen', String(port), sourceName, '--output', 'compact', '--no-healthcheck'],
 		{
 			stdio: ['ignore', 'pipe', 'pipe'],
 			detached: true,
+			env: { ...process.env, HOOKDECK_API_KEY: API_KEY },
 		},
 	);
 	const ingestUrl = await new Promise((resolve, reject) => {
