@@ -110,15 +110,26 @@ export async function api(method, path, body, attempt = 0) {
  *                            workflow id — which the live contexts set to the
  *                            run id precisely so it lands in this net
  *
+ *   `n8n-dest-<RUN_ID>-`   the destination the trigger provisions alongside that
+ *                            connection, named with the same workflow id
+ *
  * The third was missing at first, so every node-provisioned connection survived
- * cleanup and then blocked its source from being deleted. Widening this any
- * further starts deleting real resources: the project under test also holds
- * production sources.
+ * cleanup and then blocked its source from being deleted. The fourth was missing
+ * for the same reason and went unnoticed for longer, because nothing blocks on a
+ * leaked destination — it just accumulates. One run measured destinations going
+ * 27 to 39 while sources and connections stayed level.
+ *
+ * Every form here contains the run id, which is what makes widening safe. Adding
+ * a shape without one starts deleting real resources: the project under test
+ * also holds production sources.
  */
-function ownedByThisRun(name) {
+export function ownedByThisRun(name) {
 	if (typeof name !== 'string') return false;
 	return (
-		name.startsWith(PREFIX) || name.startsWith(`cli-${PREFIX}`) || name.startsWith(`n8n-${RUN_ID}-`)
+		name.startsWith(PREFIX) ||
+		name.startsWith(`cli-${PREFIX}`) ||
+		name.startsWith(`n8n-${RUN_ID}-`) ||
+		name.startsWith(`n8n-dest-${RUN_ID}-`)
 	);
 }
 
