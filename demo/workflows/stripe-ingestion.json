@@ -1,0 +1,71 @@
+{
+  "name": "Stripe ingestion",
+  "nodes": [
+    {
+      "id": "7f71ba73-3829-4d6b-8a81-d4f11cdfdafa",
+      "name": "Stripe events",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {
+        "source": {
+          "__rl": true,
+          "value": "demo-stripe",
+          "mode": "name"
+        },
+        "sourceType": "WEBHOOK",
+        "verification": "none",
+        "ackMode": "sync",
+        "options": {}
+      },
+      "webhookId": "c1c49f0c-b29c-4e65-b146-a6991067f044",
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "id": "03a8f1a5-145c-4bc3-8fd6-196b2cc00b19",
+      "name": "Post to ledger",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        224,
+        0
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "https://mock.hookdeck.com?status=500",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "Stripe events": {
+      "main": [
+        [
+          {
+            "node": "Post to ledger",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "594db211a480b1c2a0109a0e3a30988972c3a6ecc5e4afc952b72c4e50c2716b"
+  }
+}

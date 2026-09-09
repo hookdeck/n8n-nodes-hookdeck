@@ -1,9 +1,42 @@
 # Demo setup
 
-One script, `reset-demo.sh`, which puts
-[`examples/ai-incident-agent.json`](../examples/ai-incident-agent.json) back
-into a state where it will fire again. Nothing here is part of the published
-package — `package.json` ships `dist/nodes` and `dist/credentials` only.
+The two workflows from the launch video, and one script that puts them back into
+a state where they will fire again.
+
+- [`workflows/stripe-ingestion.json`](workflows/stripe-ingestion.json) — Stripe
+  events into an n8n workflow, on Sync acknowledgement so a failed run answers
+  the Event Gateway with a 500.
+- [`workflows/ingestion-incident.json`](workflows/ingestion-incident.json) — the
+  `issue.opened` notification into an AI agent that reads the issue, counts the
+  failures, decides whether the destination is down or merely flaky, and pauses
+  the connection if it is down.
+- [`reset.mjs`](reset.mjs) — `status`, `reset`, `warmup` and `prime`.
+
+Import the workflows from n8n: **Workflows → ⋯ → Import from File**. Nothing here
+is part of the published package — `package.json` ships `dist/nodes` and
+`dist/credentials` only.
+
+
+## Reaching n8n
+
+`reset.mjs` needs exactly one thing from n8n: unpublish, then publish. That is
+what forces a fresh connection id. The Public API is the obvious route and is
+closed to us, so the instance MCP server is the replacement — it exposes
+`unpublish_workflow` and `publish_workflow`.
+
+Which credential the *script* uses is still open. A claude.ai connector or
+`claude mcp login` authenticates a person or an agent, not a shell script. The
+options, in the order they should be tried:
+
+1. **A static MCP token**, if Settings → Instance-level MCP issues one. Then the
+   script speaks JSON-RPC over curl and stays fully automated. Unverified — the
+   token may not exist in that form, and streamable HTTP has session handling
+   that may make curl unpleasant.
+2. **Prompt for a manual toggle.** The script does the whole Hookdeck side, then
+   asks you to switch the workflow Inactive → Active and polls for the new
+   connection. Costs one click, needs no credential, works on any n8n.
+
+Option 2 always works and is the fallback if 1 turns out ugly.
 
 ## What the demo shows
 
@@ -15,7 +48,10 @@ and pauses the connection so retries stop piling up against something that is
 already broken.
 
 Measured over three consecutive runs from a cleared project, the failure to the
-agent's incident note took **6–8 seconds**. The most legible moment is the
+agent's incident note took **6–8 seconds** — but that was a local n8n reached
+through `hookdeck listen`, and those runs cleared the project by hand. Treat it
+as an order of magnitude, not a number to plan a recording against, until it is
+re-measured on Cloud. The most legible moment is the
 Hookdeck dashboard's connection list before and after — it is the external
 system that changed, not an n8n panel.
 
@@ -24,15 +60,29 @@ system that changed, not an n8n panel.
 - **Node 20 or newer** and **curl**. The script parses JSON with `node`, so
   there is no `jq` or `python3` dependency.
 - **A running n8n** with this node installed, at `http://localhost:5678` or
-  wherever `N8N_URL` points.
+  wherever `N8N_URL` points. On n8n Cloud that is the instance URL, and the
+  instance being publicly reachable is what lets you drop the CLI — see
+  `--no-listen` below.
 - **The agent workflow imported and published once**, under its exported name
   `Hookdeck — AI incident agent`. The script finds it by that name — publishing
   it once is what provisions the Hookdeck source it needs.
-- **`N8N_API_KEY`** (n8n → Settings → API) and **`HOOKDECK_EG_API_KEY`** (a
-  Hookdeck project API key), exported or in `.env` in the repo root. An exported
-  value wins over `.env`.
+- **`demo/.env`**, holding `HOOKDECK_DEMO_API_KEY`, `N8N_API_KEY` and
+  optionally `N8N_URL`. Copy [`.env.example`](.env.example) to get the three
+  with their explanations:
+
+  ```bash
+  cp demo/.env.example demo/.env
+  ```
+
+  An exported environment variable wins over the file, which is what makes a
+  one-off `N8N_URL=... node demo/reset.mjs` work.
 - **A throwaway Hookdeck project.** The script deletes resources; do not point
-  it at a project carrying live traffic.
+  it at a project carrying live traffic. The demo keeps its own `.env` beside
+  this README rather than sharing the repo root's, because the root file holds
+  `HOOKDECK_EG_API_KEY` for the live test suite and that is a *different*
+  Hookdeck project. The script reads only `demo/.env` and never falls back to
+  the root one — pointing it at the CI project would dismiss that project's
+  issues and delete its connections mid-run.
 - **A delivery issue trigger** in that project (Hookdeck dashboard → Issues).
   Without one, no failure ever becomes an issue and the demo has no first half.
   The script stops with that message rather than half-running.
@@ -76,9 +126,9 @@ activation re-provision it.
 ## Running it
 
 ```bash
-./demo-setup/reset-demo.sh              # ~30s, ends with READY
-./demo-setup/reset-demo.sh --no-listen  # n8n is publicly reachable; no CLI
-N8N_URL=http://localhost:5679 ./demo-setup/reset-demo.sh
+node demo/reset.mjs              # ~30s, ends with READY
+node demo/reset.mjs --no-listen  # n8n is publicly reachable; no CLI
+N8N_URL=http://localhost:5679 node demo/reset.mjs
 ```
 
 It runs from any working directory — it resolves the repo root from its own

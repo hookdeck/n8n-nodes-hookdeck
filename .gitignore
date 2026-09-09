@@ -15,3 +15,19 @@ node_modules
 # Local n8n state, if N8N_USER_FOLDER is pointed inside the repo
 .n8n/
 .n8n-local/
+
+# Claude Code worktrees, which are clones of this repo and must never be
+# committed into it.
+.claude/worktrees/
+
+# Video production - narration, recording walkthrough, slide deck, captured
+# stills, YouTube listing. Launch marketing rather than package documentation,
+# and it lives with the rest of that work outside this repo. Ignored here so a
+# regenerate cannot quietly add it back.
+demo/stills/
+demo/deck.html
+demo/NARRATION.md
+demo/WALKTHROUGH.md
+demo/DECK.md
+demo/YOUTUBE.md
+demo/captions.srt
