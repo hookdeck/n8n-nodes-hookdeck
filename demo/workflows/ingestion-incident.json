@@ -1,0 +1,230 @@
+{
+  "name": "Ingestion incident",
+  "nodes": [
+    {
+      "parameters": {
+        "source": {
+          "__rl": true,
+          "value": "demo-hookdeck-issues",
+          "mode": "name"
+        },
+        "options": {}
+      },
+      "id": "c9e38acb-ecdd-4981-a5fe-4caf85836438",
+      "name": "Hookdeck issue opened",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        112
+      ],
+      "webhookId": "72406b7f-1264-4154-881a-c746abdf16da",
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=A Hookdeck delivery issue has just opened.\n\nissue_id: {{ $json.body.issue.id }}\nconnection_id: {{ $json.body.issue.aggregation_keys.webhook_id[0] }}\nconnection_name: {{ $json.body.trigger_webhook.full_name }}\ndestination_id: {{ $json.body.issue.data.trigger_event.destination_id }}\nsource_id: {{ $json.body.issue.data.trigger_event.source_id }}\nerror_code: {{ $json.body.issue.data.trigger_attempt.error_code }}\nresponse_status: {{ $json.body.issue.data.trigger_attempt.response_status }}\nfailing_event_id: {{ $json.body.issue.reference.event_id }}\n\nInvestigate and remediate.",
+        "options": {
+          "systemMessage": "You are an on-call engineer for a webhook ingestion pipeline built on Hookdeck.\n\nA delivery issue has opened: an event failed to reach its destination. Hookdeck will keep retrying on a schedule, so a destination that is returning 5xx will accumulate retries against a system that is already broken. Your job is to establish the facts, stop the retries, and report.\n\nDo this, in order:\n\n1. Call \"Get issue\" with the issue_id to confirm the issue is still OPENED and read the response status.\n2. Call \"List failed events\" with the destination_id and status FAILED to see how many events are currently affected. You must look this up - it is not in what you were given.\n3. Call \"Pause connection\" with the connection_id. Pausing holds queued events rather than dropping them, so it is safe and reversible; it stops retries piling up against a destination that is returning errors. Do this whenever the destination is returning 5xx, however many events are affected so far - one failing event today is five retries over the next five minutes.\n\nThen reply with a short incident note for a human.\n\nFormatting, which matters because this note is read on screen:\n- ONE paragraph of plain prose. Two or three sentences.\n- No markdown, no headings, no bullet points, no line breaks.\n- Never emit a newline escape such as the two characters backslash and n. Write continuous prose.\n- Name the connection by its SOURCE name only - the part of connection_name before the arrow. The half after the arrow is a machine-generated id and means nothing to a human reading this.\n\nCover: what broke, how many events are affected right now and the response status, that you paused the connection and queued events are held not lost, and what a human should check next.\n\nEvery figure must come from a tool result - do not invent numbers."
+        }
+      },
+      "id": "6cb12d00-319c-4d4a-a59d-99b4e6254779",
+      "name": "On-call agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        352,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "claude-haiku-4-5-20251001",
+          "cachedResultName": "Claude Haiku 4.5",
+          "cachedResultUrl": ""
+        },
+        "options": {
+          "maxTokensToSample": 1024,
+          "temperature": 0
+        }
+      },
+      "id": "4993c392-66a8-4095-bfe1-213ddf257e12",
+      "name": "Claude Haiku 4.5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatAnthropic",
+      "typeVersion": 1.5,
+      "position": [
+        224,
+        336
+      ],
+      "credentials": {
+        "anthropicApi": {
+          "name": "Anthropic account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Get the current state of a Hookdeck delivery issue by its ID. Use this first to confirm the issue is still open.",
+        "resource": "issue",
+        "id": "={{ $fromAI('issue_id', 'The Hookdeck issue ID, looks like iss_XXXX', 'string') }}"
+      },
+      "id": "04508143-cc98-42a7-83c0-45e2a39461ba",
+      "name": "Get issue",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        352,
+        336
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "List events in Hookdeck, filtered by destination and status. Use this to count how many events are currently failing on a destination — the blast radius.",
+        "operation": "getAll",
+        "limit": 20,
+        "filters": {
+          "status": "FAILED",
+          "destination_id": "={{ $fromAI('destination_id', 'The Hookdeck destination ID to filter events by, looks like des_XXXX', 'string') }}"
+        }
+      },
+      "id": "cff51396-4ebb-4703-967b-c393dc451337",
+      "name": "List failed events",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        480,
+        336
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "descriptionType": "manual",
+        "toolDescription": "Pause a Hookdeck connection so it stops attempting deliveries. Queued events are held, not lost. Use only when a destination is broken for more than one event.",
+        "resource": "connection",
+        "operation": "pause",
+        "id": "={{ $fromAI('connection_id', 'The Hookdeck connection ID to pause, looks like web_XXXX', 'string') }}"
+      },
+      "id": "e24a96ff-aeee-455b-b370-a48c97f96512",
+      "name": "Pause connection",
+      "type": "@hookdeck/n8n-nodes-hookdeck.hookdeckEventGatewayTool",
+      "typeVersion": 1,
+      "position": [
+        608,
+        336
+      ],
+      "credentials": {
+        "hookdeckEventGatewayApi": {
+          "name": "Hookdeck Event Gateway account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "2155fe54-3f97-437c-aff2-eaeb827a7acc",
+      "name": "Notify on-call",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        816,
+        112
+      ]
+    }
+  ],
+  "connections": {
+    "Hookdeck issue opened": {
+      "main": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "On-call agent": {
+      "main": [
+        [
+          {
+            "node": "Notify on-call",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claude Haiku 4.5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get issue": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "List failed events": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pause connection": {
+      "ai_tool": [
+        [
+          {
+            "node": "On-call agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "availableInMCP": true,
+    "binaryMode": "separate"
+  },
+  "pinData": {},
+  "meta": {
+    "instanceId": "594db211a480b1c2a0109a0e3a30988972c3a6ecc5e4afc952b72c4e50c2716b"
+  }
+}

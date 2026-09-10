@@ -155,7 +155,7 @@ the Hookdeck side rather than in n8n:
   connection. Otherwise a failure here opens an issue, which notifies this
   workflow, which is a loop.
 
-[`demo-setup/`](../demo-setup/) has a script that does all of that, and explains
+[`demo/`](../demo/) has a script that does all of that, and explains
 what it deletes.
 
 Observed, over three consecutive runs from a cleared project: the upstream Sync

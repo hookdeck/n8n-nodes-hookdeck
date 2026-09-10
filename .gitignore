@@ -15,3 +15,15 @@ node_modules
 # Local n8n state, if N8N_USER_FOLDER is pointed inside the repo
 .n8n/
 .n8n-local/
+
+# Claude Code worktrees, which are clones of this repo and must never be
+# committed into it.
+.claude/worktrees/
+
+# The YouTube listing and its captions are launch marketing, not documentation
+# for this package, and they live with the rest of that work outside this repo.
+# Ignored so a regenerate cannot quietly add them back. The narration, the
+# recording walkthrough, the deck and the stills DO belong here - they are how
+# someone reproduces the demo.
+demo/YOUTUBE.md
+demo/captions.srt
