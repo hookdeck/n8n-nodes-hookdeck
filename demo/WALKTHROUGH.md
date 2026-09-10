@@ -51,12 +51,10 @@ spoken.** The quotes here are what appears on screen.
 leaves an empty duplicate and resetting *that* one looks exactly like the demo
 quietly breaking. Delete any duplicates in n8n first.
 
-The import testing in 4.2 left six empty workflows behind; all six have been
-archived, and `search_workflows` excludes archived ones, so `reset` is happy.
 The n8n workflow list should show exactly two, both Published: `Stripe
-ingestion` and `Ingestion incident`.
-
-Note the row menu offers **Archive**, not delete — archiving is reversible.
+ingestion` and `Ingestion incident`. If a failed import has left duplicates,
+clear them first — the row menu offers **Archive** rather than delete, and
+`search_workflows` excludes archived workflows, so archiving is enough.
 
 ### 1.3 Pre-flight
 
@@ -72,6 +70,9 @@ connection, the issue trigger scoped to the current Stripe connection and not to
 It cannot check where `issue.opened` points, because Hookdeck's
 `/notifications/webhooks` is PUT-only with no GET. `reset` rewrites it every
 time, so the way to be sure is to run `reset`, not to read `status`.
+
+`status` also refuses when two workflows share a name, rather than guessing
+which is the real one.
 
 ### 1.4 Framing, learned by capturing every shot
 
@@ -125,129 +126,59 @@ cut off at the left edge.
 
 ---
 
-## Part 2 — the recording sequence
+## Part 2 — the capture sequence
 
-Record out of order. Segment A is the only one that needs the live chain.
+**Per-scene detail lives in [NARRATION.md](NARRATION.md)**, which names the frame
+against every spoken line. This section is only the order things have to happen
+in, because that order is not obvious and two steps of it are irreversible.
 
-### CUT POINT — reset and prime
+### Capture before you break anything
 
 ```bash
 node --env-file-if-exists=demo/.env demo/reset.mjs reset
+node --env-file-if-exists=demo/.env demo/reset.mjs warmup
+```
+
+`reset` takes about 20 seconds and ends in `READY`. `warmup` fires six events
+that **succeed**, so the connection list has real traffic on it.
+
+Now capture, in any order:
+
+| Scene | Where |
+| --- | --- |
+| 05-D1 | Hookdeck → Connections, **Table** view. Both `Active`, six events on `demo-stripe`. **This is the shot that cannot be retaken later.** |
+| 02-B | n8n canvas → node panel → search `hookdeck` |
+| 03-C1 | `Stripe ingestion` → Editor |
+| 04-C2 | `Ingestion incident` → Editor |
+
+### Then break it
+
+```bash
 node --env-file-if-exists=demo/.env demo/reset.mjs prime
 ```
 
-`reset` takes about 20 seconds and ends in `READY`. `prime` fires one failing
-Stripe event and returns immediately.
+`prime` fires six failing events concurrently. Concurrently matters: the issue
+opens on the first failure and the agent counts about six seconds later, so
+spacing them out means only one has reached `FAILED` when it looks — and the
+agent then correctly refuses to pause over a single blip.
 
-**You have about 10 seconds** from `prime` to the agent finishing. Do not try to
-record that window live — let it complete, then record the finished execution.
-The story is the result, not watching a spinner.
+**Wait about 15 seconds**, then capture:
 
-### Segment A — the agent working (0:15)
+| Scene | Where |
+| --- | --- |
+| 01-A | `Ingestion incident` → Executions → newest, **Logs** open |
+| 06-D2 | `Stripe ingestion` → Executions → newest, **Logs** open |
+| 07-D3 | Hookdeck → Issues |
+| 08-D4 | Hookdeck → Connections, **Table** view. `demo-stripe` now `Paused`. |
 
-**Open:** `Ingestion incident` -> **Executions** -> the newest run.
-**Then:** click **Logs** at the bottom to open the log panel.
+09-E has no frame; the deck draws the end card.
 
-Layout, left to right: the executions list, the canvas, and along the bottom the
-Logs panel with a tool-call tree on the left and the selected node's output on
-the right.
+**Do not try to record the chain live.** It completes in 10–12 seconds and most
+of that is a spinner. Let it finish and record the result.
 
-**On the canvas.** `Hookdeck issue opened` -> `On-call agent` -> `Notify
-on-call`, with four sub-nodes hanging below the agent: `Claude Haiku 4.5`
-carrying a **✓3** badge, and three Hookdeck tools each with a green tick and a
-subtitle naming the operation:
+### Between takes
 
-```
-Get issue            get: issue
-List failed events   getAll: event
-Pause connection     pause: connection
-```
-
-Those three subtitles are the shot. They are the differentiated thing — a
-community node in tool position, being called by an agent, doing real work.
-
-**In the Logs panel**, the tree is the beat sequence, in execution order:
-
-```
-Hookdeck issue opened
-On-call agent
-  Claude Haiku 4.5
-  Get issue
-  List failed events
-  Claude Haiku 4.5
-  Pause connection
-  Claude Haiku 4.5
-Notify on-call
-```
-
-Model, tool, model, tool, model — that alternation reads as reasoning rather
-than a script, and it is worth letting it breathe.
-
-**Click `On-call agent`, then the `Output` tab.** Header reads
-`Success in 2.256s | 10,359 Tokens`. The body is the payoff, verbatim from the
-run on 8 Sep:
-
-> The demo-stripe connection is now paused. The n8n destination returned a 500
-> error on a payment event, with 1 event currently failing. The connection has
-> been paused to hold queued events and prevent retries from piling up against a
-> broken destination. A human should check the n8n workflow logs to diagnose why
-> it is returning "Error in workflow" and resume the connection once the issue is
-> resolved.
-
-The workflow header reads `Succeeded in 6.93s | 59KB | ID#4`.
-
-### Segment B — what just happened (0:35)
-
-Three shots, each its own recording. Zero navigation in any of them.
-
-**B1, the failing run.** `Stripe ingestion` -> Executions -> the newest.
-`Stripe events` (subtitle `demo-stripe`) -> `Post to ledger`
-(`POST: https://mock.hookdec...`) with a red cross. Header `Error in 373ms`.
-Output pane, in red:
-
-> The service was not able to process your request
-> The Mock API returns the request data with a HTTP 500 code
-
-**B2, Hookdeck's connection list.** Shows both connections and, after the agent
-has run, `demo-stripe -> ...` marked paused. The external system changed — that
-is the point, and it is more convincing than any n8n panel.
-
-Caveat: the connection reads
-`demo-stripe -> n8n-lYWnz7ZrAjWTfp0w-7f71ba73-3829-4d6b-8a81-d4f11cdfdafa`,
-because the node names destinations `n8n-<workflowId>-<nodeId>`. Frame it to
-favour the left half, or accept the noise. See 4.4.
-
-**B3, the Issues page.** A still is fine.
-
-### Segment A2 — what this is (0:15)
-
-Node panel -> search `hookdeck` -> the entry appears under **More from the
-community** with the verified shield -> Install. Speed-ramp 2-4x.
-
-**No version number is on screen on this path**, and no package name is typed —
-but only while you stay on the flat search results. Clicking through to the
-node's own page adds a footer reading `Package version 0.2.1 (Latest)`. Do not
-click in. Settings -> Community nodes is only for *uninstalling*, so stay out of
-that too.
-
-Recorded separately from A and cut in after it: hook first, then what the thing
-is.
-
-### Segment C — what the two nodes do (0:20)
-
-Both canvases, side by side or cut between. Installation is covered in A2, so
-this segment is about roles — the **Hookdeck Event Gateway Trigger**
-provisioning the source, destination and connection on publish, and the
-**Hookdeck Event Gateway** action node sitting on the agent's tool port.
-
-Those two display names are what the canvas shows, so the narration matches the
-screen.
-
-### Segment D — end card (0:10)
-
-Static. `@hookdeck/n8n-nodes-hookdeck`, repo, docs. No version.
-
----
+`reset` again. It is the only way to get a second `issue.opened` — see Part 4.
 
 ## Part 3 — measured timings
 
@@ -296,8 +227,15 @@ Cloud is the number to plan against.
   The claim that trials cannot install community nodes is false.
 - **Cloud needs no CLI.** The trigger provisioned an HTTP destination pointing at
   the public n8n webhook URL.
+- **The agent tells a transient failure from a persistent one.** Told to pause
+  only for the second, it refused to pause on a single failure and said so:
+  *"only one event failing against this destination. This is a transient
+  failure."* With six failures it paused and explained why: *"Five events have
+  failed with the same response status, indicating the destination is down and
+  not flaky."* This is why `prime` fires several events, and fires them
+  concurrently.
 
-### 4.2 The JSON exports are UNVERIFIED, for a boring reason
+### 4.2 The JSON exports are still UNVERIFIED
 
 `demo/workflows/*.json` could not be verified by automation, and the reason
 turned out not to be the files.
@@ -322,8 +260,9 @@ been added.
 
 **Still worth 30 seconds of your time before you rely on them.** Workflows ->
 Import from File, pick `demo/workflows/ingestion-incident.json`, and check the
-three tools are attached under the agent. A real file picker is the one path
-that has not been tried.
+three actions are attached under the agent. A real file picker is the one path
+that has not been tried, and these files are now linked from the video
+description — so if the import is broken, that is where people will find out.
 
 ### 4.3 Workflows built in the UI are invisible to MCP
 
