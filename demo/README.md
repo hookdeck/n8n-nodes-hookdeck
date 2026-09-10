@@ -16,6 +16,17 @@ Import the workflows from n8n: **Workflows → ⋯ → Import from File**. Nothi
 is part of the published package — `package.json` ships `dist/nodes` and
 `dist/credentials` only.
 
+## Recording the demo
+
+- [`WALKTHROUGH.md`](WALKTHROUGH.md) — what to run, what to open, and the
+  framing traps that cost a take.
+- [`NARRATION.md`](NARRATION.md) — the script, one scene per frame.
+- [`stills/`](stills/) — the eight captured frames, and what each one shows.
+- [`deck.html`](deck.html) — a full-screen deck of those frames for recording
+  against. Open it in a browser; see [`DECK.md`](DECK.md).
+- [`build-deck.mjs`](build-deck.mjs) — rebuilds the deck's slide list from
+  `NARRATION.md`. Run it after editing the script.
+
 
 ## Reaching n8n
 

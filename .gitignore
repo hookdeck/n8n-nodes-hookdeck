@@ -20,14 +20,10 @@ node_modules
 # committed into it.
 .claude/worktrees/
 
-# Video production - narration, recording walkthrough, slide deck, captured
-# stills, YouTube listing. Launch marketing rather than package documentation,
-# and it lives with the rest of that work outside this repo. Ignored here so a
-# regenerate cannot quietly add it back.
-demo/stills/
-demo/deck.html
-demo/NARRATION.md
-demo/WALKTHROUGH.md
-demo/DECK.md
+# The YouTube listing and its captions are launch marketing, not documentation
+# for this package, and they live with the rest of that work outside this repo.
+# Ignored so a regenerate cannot quietly add them back. The narration, the
+# recording walkthrough, the deck and the stills DO belong here - they are how
+# someone reproduces the demo.
 demo/YOUTUBE.md
 demo/captions.srt
