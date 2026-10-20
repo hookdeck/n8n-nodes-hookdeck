@@ -221,6 +221,51 @@ test('live API surface', { skip, concurrency: false }, async (t) => {
 		);
 	});
 
+	await t.test('GitLab takes its secret in api_key, under its own scheme', async () => {
+		// GitLab's spec now offers Standard Webhooks beside its own GITLAB scheme.
+		// The node still sends `auth_type: 'GITLAB'` with the secret in `api_key`,
+		// and the spec saying that is valid is not the same as Hookdeck accepting it.
+		const { connection } = await provision(`${PREFIX}-gitlab`, {
+			sourceType: 'GITLAB',
+			platformSecret: 'gitlab-livetest-token',
+		});
+		const source = await api('GET', `/sources/${connection.source.id}`);
+
+		assert.equal(source.type, 'GITLAB');
+		// Unlike the single-scheme platforms above, a type with a choice may echo
+		// the scheme it was given. If it does, that has to be GitLab's own.
+		if (source.config?.auth_type != null) assert.equal(source.config.auth_type, 'GITLAB');
+	});
+
+	await t.test('ShipStation provisions without a secret, and Hookdeck refuses one', async () => {
+		// The spec dropped ShipStation's `public_key`, which is what moved it to
+		// "takes no secret", and the node now refuses a secret before sending it.
+		// This pins down that Hookdeck refuses the old request too, so the node's
+		// refusal guards against something real rather than a reading of the spec.
+		const { connection } = await provision(`${PREFIX}-shipstation`, { sourceType: 'SHIPSTATION' });
+		const source = await api('GET', `/sources/${connection.source.id}`);
+		assert.equal(source.type, 'SHIPSTATION');
+
+		await assert.rejects(
+			api('PUT', '/connections', {
+				name: `${PREFIX}-shipstation-keyed`,
+				source: {
+					name: `${PREFIX}-shipstation-keyed`,
+					type: 'SHIPSTATION',
+					// Exactly what the node sent before this change.
+					config: { auth_type: 'SHIPSTATION', auth: { public_key: 'livetest' } },
+				},
+				destination: {
+					name: `${PREFIX}-shipstation-keyed-dest`,
+					type: 'HTTP',
+					config: { url: DESTINATION_URL },
+				},
+			}),
+			/→ 4\d\d/,
+			'Hookdeck accepted a ShipStation public_key, so "none" is refusing a usable secret',
+		);
+	});
+
 	await t.test('Source Config (JSON) overrides the generated config', async () => {
 		// The merge is one level deep, so `auth` is replaced wholesale rather than
 		// blended. That suits the documented purpose — expressing a scheme the

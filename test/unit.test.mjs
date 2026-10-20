@@ -297,6 +297,32 @@ test('platform auth shapes come from the spec, not assumption', () => {
 	}
 });
 
+test('a choice of schemes that includes the type itself resolves to that scheme', () => {
+	// The node sends `auth_type` set to the source type, which selects the scheme
+	// named after it. GitLab gained a Standard Webhooks scheme beside its own, and
+	// reading that as an unanswerable choice would have refused the very request
+	// the node already sends. The live suite checks Hookdeck still accepts it.
+	assert.deepEqual(SOURCE_TYPE_AUTH.GITLAB, { kind: 'fields', fields: ['api_key'] });
+
+	// Without its own name among the options, a choice is still a choice.
+	assert.equal(SOURCE_TYPE_AUTH.AZURE_EVENT_GRID.kind, 'choice');
+	assert.equal(SOURCE_TYPE_AUTH.SENDGRID_INBOUND.kind, 'choice');
+
+	// ShipStation took a `public_key` until its auth schema became an empty
+	// object that admits no properties, so a secret now has nowhere to go.
+	assert.equal(SOURCE_TYPE_AUTH.SHIPSTATION.kind, 'none');
+});
+
+test('labels the spec cannot supply are not left to title-casing', () => {
+	// A choice of auth schemes carries no `x-docs-type`, and neither does a type
+	// with no auth schema, so these would otherwise read "Gitlab", "Google
+	// Pubsub" and "Sendgrid Inbound".
+	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
+	assert.equal(label('GITLAB'), 'GitLab');
+	assert.equal(label('GOOGLE_PUBSUB'), 'Google Pub/Sub');
+	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
+});
+
 test('every mapped source type is one the UI actually offers', () => {
 	// Both are generated from the same schema; a mapped type the UI never offers
 	// is dead weight, and the reverse would mean offering something unprovisionable.

@@ -2,7 +2,7 @@
 /**
  * Regenerate `nodes/Hookdeck/SourceTypes.ts` from Hookdeck's live OpenAPI schema.
  *
- * Both exports in that file are derived data — the ~150 platform source types
+ * Both exports in that file are derived data — the ~180 platform source types
  * and the auth shape each one expects — and both go stale silently as Hookdeck
  * adds platform support. Silently is the problem: a missing type is a platform
  * the node cannot offer, and a wrong auth shape is a secret sent in a field the
@@ -42,8 +42,14 @@ const LABEL_OVERRIDES = {
 	'PROPERTY-FINDER': 'Property Finder',
 	// The spec labels this "Managed", which collides with the MANAGED type above.
 	HOOKDECK_OUTPOST: 'Hookdeck Outpost',
-	// The spec says "X". Alone in a 150-entry dropdown that is unrecognisable.
+	// The spec says "X". Alone in a 180-entry dropdown that is unrecognisable.
 	TWITTER: 'X (Twitter)',
+	// A choice of auth schemes carries no `x-docs-type`, nor does a type with no
+	// auth schema, so these fall through to title-casing. GitLab was labelled
+	// correctly until it gained a second scheme, after which it read "Gitlab".
+	GITLAB: 'GitLab',
+	GOOGLE_PUBSUB: 'Google Pub/Sub',
+	SENDGRID_INBOUND: 'SendGrid Inbound Parse',
 	// Vendor casing the spec gets wrong.
 	SENDGRID: 'SendGrid',
 	CLOUDSIGNAL: 'CloudSignal',
@@ -59,6 +65,31 @@ function deref(schemas, schema) {
 	return schema;
 }
 
+/** The fields an auth schema names, or `none` when it names nothing. */
+function fieldsShape(auth) {
+	const fields = Object.keys(auth.properties ?? {}).sort();
+	if (fields.length === 0) return { kind: 'none' };
+	return { kind: 'fields', fields };
+}
+
+/**
+ * The scheme a type's own name selects, when it offers a choice that includes it.
+ *
+ * The node sends `auth_type` set to the source type itself with every platform
+ * secret (see `buildSourceConfig`), so a choice of schemes only leaves the node
+ * unable to answer when the type's own name is not one of the options. GitLab is
+ * the case that forced this: it gained a Standard Webhooks scheme beside its own
+ * `GITLAB` one, and reading that as a bare choice would have refused the secret
+ * that `GITLAB` scheme takes in `api_key` — the request the node already sends.
+ */
+function ownScheme(schemas, config, type) {
+	if (!config.properties.auth_type.enum?.includes(type)) return undefined;
+	const auth = deref(schemas, config.properties.auth);
+	return auth?.oneOf
+		?.map((scheme) => deref(schemas, scheme))
+		.find((scheme) => scheme?.['x-docs-type'] === type);
+}
+
 /**
  * Work out how a source type expects its verification secret to be supplied.
  *
@@ -72,17 +103,17 @@ function authShapeFor(schemas, type) {
 	// the node falls back to the common field rather than asserting a shape.
 	if (!config) return undefined;
 
-	// An `auth_type` property means the type accepts a choice of schemes, so
-	// which fields apply cannot be known from the type alone.
-	if (config.properties?.auth_type) return { kind: 'choice' };
+	// An `auth_type` property means the type accepts a choice of schemes. Which
+	// fields apply can only be known when one of those schemes is the type's own.
+	if (config.properties?.auth_type) {
+		const own = ownScheme(schemas, config, type);
+		return own ? fieldsShape(own) : { kind: 'choice' };
+	}
 
 	const auth = deref(schemas, config.properties?.auth);
 	if (!auth) return { kind: 'none' };
 	if (auth.oneOf) return { kind: 'choice' };
-
-	const fields = Object.keys(auth.properties ?? {}).sort();
-	if (fields.length === 0) return { kind: 'none' };
-	return { kind: 'fields', fields };
+	return fieldsShape(auth);
 }
 
 function labelFor(schemas, type) {
@@ -124,7 +155,7 @@ function render(options, authShapes) {
  * reads \`Source.properties.type.enum\` and the \`SourceTypeConfig*\` schemas
  * from ${DEFAULT_SPEC}.
  *
- * Held as a constant rather than fetched at runtime: the spec is ~475KB and a
+ * Held as a constant rather than fetched at runtime: the spec is over 500KB and a
  * dropdown should not pay that cost every time it opens. \`npm run
  * check:source-types\` fails when this file no longer matches the spec.
  *
@@ -146,9 +177,11 @@ ${optionLines}
  * possible schemes":
  *
  * - \`fields\` — the named fields. One means a single supplied secret can be
- *   placed correctly; several means it cannot.
- * - \`choice\` — the type accepts a choice of schemes, so which fields apply
- *   cannot be inferred.
+ *   placed correctly; several means it cannot. A type offering a choice of
+ *   schemes lands here when one of them is its own, because the node names the
+ *   type as the \`auth_type\` and so selects that scheme.
+ * - \`choice\` — the type accepts a choice of schemes, none of them its own, so
+ *   which fields apply cannot be inferred.
  * - \`none\`   — the type takes no secret at all.
  *
  * Sending a secret the API does not expect is rejected at activation, so each

@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- 35 more platforms in **Source Type**, bringing it in line with what Hookdeck
+  supports today: AfterShip, Aircall, Auth0, Azure Event Grid, Bitbucket,
+  Calendly, Checkout.com, CircleCI, Clerk, Community.com, Cronofy, Deepgram,
+  Docker Hub, Fanvue, Formstack, Google Pub/Sub, Grafana, Hugging Face, Jira,
+  Klaviyo, Knock, MailerSend, MCP Events, Mollie, Notion, Onfleet, Ordinal, Quo,
+  SendGrid Inbound Parse, Snipcart, SparkPost, Supabase, Webflow, Whatnot and
+  WordPress.com. Azure Event Grid, Ordinal and SendGrid Inbound Parse offer a
+  choice of verification scheme, and Deepgram, Formstack, Grafana, SparkPost and
+  Supabase need several values. One **Webhook Secret** cannot express either, so
+  their verification goes in **Options → Source Config (JSON)**. Docker Hub, Google Pub/Sub and WordPress.com take no
+  secret at all. In both cases the node says so at publish if you fill in
+  **Webhook Secret**, rather than sending something Hookdeck would reject.
+
+### Changed
+
+- **ShipStation** no longer takes a **Webhook Secret**. Hookdeck stopped
+  accepting the public key it used to ask for, so publishing a new ShipStation
+  source with one filled in now stops with "SHIPSTATION does not take a
+  verification secret" instead of a rejection from Hookdeck. Clear the field
+  and publish again. An existing ShipStation source you picked from the list is
+  not affected unless **Update Existing Source** is on.
+
 ## [0.3.0] - 2026-09-09
 
 ### Fixed
