@@ -77,7 +77,7 @@ export function sourceConfigProperties(extraShow: ShowConditions = {}): INodePro
 				},
 			},
 			description:
-				'Signing secret issued by the platform. Leave empty to skip verification. Platforms whose verification needs more than a single secret can be configured with Source Config (JSON) under Options.',
+				'Signing secret issued by the platform. Leave empty to skip verification, except on platforms such as AWS SNS and ShipStation that Hookdeck verifies without one. Platforms whose verification needs more than a single secret can be configured with Source Config (JSON) under Options.',
 		},
 		{
 			displayName: 'HMAC Secret',

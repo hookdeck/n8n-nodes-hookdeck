@@ -283,14 +283,16 @@ test('platform auth shapes come from the spec, not assumption', () => {
 	assert.deepEqual(SOURCE_TYPE_AUTH.GITLAB, { kind: 'fields', fields: ['api_key'] });
 	assert.deepEqual(SOURCE_TYPE_AUTH.POSTMARK, { kind: 'fields', fields: ['password', 'username'] });
 
-	// The three non-field cases must stay distinguishable: they need different
-	// answers, and an array alone cannot tell "no secret" from "several schemes".
+	// The non-field cases must stay distinguishable: they need different answers,
+	// and an array alone cannot tell "no secret" from "several schemes".
 	assert.equal(SOURCE_TYPE_AUTH.HTTP.kind, 'choice');
-	assert.equal(SOURCE_TYPE_AUTH.AWS_SNS.kind, 'none');
 	assert.equal(SOURCE_TYPE_AUTH.MONDAY.kind, 'none');
 
 	for (const [type, shape] of Object.entries(SOURCE_TYPE_AUTH)) {
-		assert.ok(['fields', 'choice', 'none'].includes(shape.kind), `${type} has an unknown kind`);
+		assert.ok(
+			['fields', 'choice', 'keyless', 'none'].includes(shape.kind),
+			`${type} has an unknown kind`,
+		);
 		if (shape.kind === 'fields') {
 			assert.ok(shape.fields.length > 0, `${type} claims fields but names none`);
 		}
@@ -307,20 +309,58 @@ test('a choice of schemes that includes the type itself resolves to that scheme'
 	// Without its own name among the options, a choice is still a choice.
 	assert.equal(SOURCE_TYPE_AUTH.AZURE_EVENT_GRID.kind, 'choice');
 	assert.equal(SOURCE_TYPE_AUTH.SENDGRID_INBOUND.kind, 'choice');
-
-	// ShipStation took a `public_key` until its auth schema became an empty
-	// object that admits no properties, so a secret now has nowhere to go.
-	assert.equal(SOURCE_TYPE_AUTH.SHIPSTATION.kind, 'none');
 });
 
 test('labels the spec cannot supply are not left to title-casing', () => {
-	// A choice of auth schemes carries no `x-docs-type`, and neither does a type
-	// with no auth schema, so these would otherwise read "Gitlab", "Google
-	// Pubsub" and "Sendgrid Inbound".
+	// A choice of auth schemes carries no `x-docs-type` of its own, so these
+	// would otherwise read "Gitlab" and "Sendgrid Inbound".
 	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
 	assert.equal(label('GITLAB'), 'GitLab');
-	assert.equal(label('GOOGLE_PUBSUB'), 'Google Pub/Sub');
 	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
+});
+
+test('a schema whose name holds a slash still resolves', () => {
+	// Hookdeck names schemas after labels, so "Google Pub/Sub" puts an unescaped
+	// slash in the $ref. Read as a path, it resolved to nothing and Pub/Sub was
+	// offered as taking no secret, when Hookdeck requires both of these.
+	assert.deepEqual(SOURCE_TYPE_AUTH.GOOGLE_PUBSUB, {
+		kind: 'fields',
+		fields: ['audience', 'service_account_email'],
+	});
+	const label = SOURCE_TYPE_OPTIONS.find((o) => o.value === 'GOOGLE_PUBSUB')?.name;
+	assert.equal(label, 'Google Pub/Sub', 'the label comes from the same schema');
+});
+
+test('a platform Hookdeck verifies without a secret is sent an empty auth', () => {
+	// Hookdeck creates verification only for a source sent with `auth`. These
+	// types need nothing entered, so without the empty object they were left
+	// accepting unsigned requests. The live suite checks Hookdeck agrees.
+	for (const type of ['AWS_SNS', 'SHIPSTATION']) {
+		assert.equal(SOURCE_TYPE_AUTH[type].kind, 'keyless', type);
+		const config = buildSourceConfig.call(
+			fakeSourceConfigContext({ platformSecret: '' }),
+			type,
+			{},
+		);
+		assert.deepEqual(config, { auth: {} }, type);
+	}
+
+	// A secret would be dropped by Hookdeck, so it is refused rather than sent.
+	assert.throws(
+		() =>
+			buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'SHIPSTATION', {}),
+		(error) => {
+			assert.match(error.message, /does not take a verification secret/);
+			assert.match(error.description ?? '', /fetches from the platform itself/);
+			return true;
+		},
+	);
+
+	// Source Config (JSON) still wins, so verification can be turned off.
+	const off = buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: '' }), 'AWS_SNS', {
+		sourceConfigJson: '{"auth": null}',
+	});
+	assert.deepEqual(off, { auth: null });
 });
 
 test('every mapped source type is one the UI actually offers', () => {
@@ -1050,7 +1090,7 @@ test('platform auth covers inline, choice-of-scheme and no-secret types', () => 
 	// Types taking no secret need their own answer: telling someone to use
 	// Source Config (JSON) here would send them after a secret that does not exist.
 	assert.throws(
-		() => buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'AWS_SNS', {}),
+		() => buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: 'x' }), 'MONDAY', {}),
 		(error) => {
 			assert.match(error.message, /does not take a verification secret/);
 			assert.match(error.description ?? '', /Leave Webhook Secret empty/);
@@ -1059,7 +1099,11 @@ test('platform auth covers inline, choice-of-scheme and no-secret types', () => 
 	);
 
 	// And leaving it empty provisions cleanly.
-	const none = buildSourceConfig.call(fakeSourceConfigContext({ platformSecret: '' }), 'AWS_SNS', {});
+	const none = buildSourceConfig.call(
+		fakeSourceConfigContext({ platformSecret: '' }),
+		'MONDAY',
+		{},
+	);
 	assert.deepEqual(none, {});
 });
 

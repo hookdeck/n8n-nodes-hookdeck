@@ -44,11 +44,10 @@ const LABEL_OVERRIDES = {
 	HOOKDECK_OUTPOST: 'Hookdeck Outpost',
 	// The spec says "X". Alone in a 180-entry dropdown that is unrecognisable.
 	TWITTER: 'X (Twitter)',
-	// A choice of auth schemes carries no `x-docs-type`, nor does a type with no
-	// auth schema, so these fall through to title-casing. GitLab was labelled
-	// correctly until it gained a second scheme, after which it read "Gitlab".
+	// A choice of auth schemes carries no `x-docs-type` of its own, so these fall
+	// through to title-casing. GitLab was labelled correctly until it gained a
+	// second scheme, after which it read "Gitlab".
 	GITLAB: 'GitLab',
-	GOOGLE_PUBSUB: 'Google Pub/Sub',
 	SENDGRID_INBOUND: 'SendGrid Inbound Parse',
 	// Vendor casing the spec gets wrong.
 	SENDGRID: 'SendGrid',
@@ -58,10 +57,45 @@ const LABEL_OVERRIDES = {
 	FRONTAPP: 'Front',
 };
 
-/** Resolve a `$ref`, or hand back an inline schema unchanged. */
+/**
+ * Types Hookdeck verifies with signing keys it fetches itself, once the source is
+ * created with an `auth` object, even an empty one.
+ *
+ * The spec cannot say this. Their auth schema is an empty object, identical to
+ * Docker Hub's or WordPress.com's, which Hookdeck does not verify at all. The
+ * difference lives in Hookdeck's own source type definitions, as a verification
+ * feature with no fields that its dashboard shows as an on/off toggle. A source
+ * created without `auth` gets no verification and accepts anything sent to it.
+ * That is what the node created for AWS SNS, while its refusal of a secret told
+ * users Hookdeck verified the platform without one.
+ */
+const KEYLESS_VERIFICATION = new Set([
+	// The signing certificate is fetched from the URL each message names.
+	'AWS_SNS',
+	// Keys come from ShipStation's published JWKS. This took a `public_key` until
+	// October 2026; Hookdeck now strips one silently rather than rejecting it.
+	'SHIPSTATION',
+]);
+
+/**
+ * Resolve a `$ref`, or hand back an inline schema unchanged.
+ *
+ * The schema name is everything after `#/components/schemas/`, not the last
+ * path segment. Hookdeck names schemas after display labels, and "Google
+ * Pub/Sub" puts an unescaped slash in the ref: a last-segment lookup found
+ * "SubAuth", which does not exist, and read Pub/Sub as taking no secret when it
+ * requires two values. `~1` and `~0` are JSON Pointer escapes, honoured in case
+ * the spec starts escaping properly.
+ */
 function deref(schemas, schema) {
 	if (!schema) return undefined;
-	if (schema.$ref) return schemas[schema.$ref.split('/').pop()];
+	if (schema.$ref) {
+		const name = schema.$ref
+			.replace(/^#\/components\/schemas\//, '')
+			.replace(/~1/g, '/')
+			.replace(/~0/g, '~');
+		return schemas[name];
+	}
 	return schema;
 }
 
@@ -91,13 +125,36 @@ function ownScheme(schemas, config, type) {
 }
 
 /**
- * Work out how a source type expects its verification secret to be supplied.
- *
- * Three outcomes, because they need three different answers from the node:
- * a single named field can hold a supplied secret, several cannot, a choice of
- * schemes cannot be inferred, and some types take no secret at all.
+ * How a source type expects verification to be set up, with the keyless
+ * exceptions the spec cannot express applied on top.
  */
 function authShapeFor(schemas, type) {
+	const shape = specAuthShapeFor(schemas, type);
+	if (!KEYLESS_VERIFICATION.has(type)) return shape;
+
+	// The exception only holds while the spec agrees there is nothing to enter.
+	// Failing here is what makes the weekly drift check report a stale entry,
+	// rather than the node going on sending an empty `auth` to a type that now
+	// wants something in it.
+	if (shape?.kind !== 'none') {
+		throw new Error(
+			`${type} is in KEYLESS_VERIFICATION, but the spec now gives it ${
+				shape ? `kind "${shape.kind}"` : 'no config schema'
+			}. Check how Hookdeck verifies it and update the list.`,
+		);
+	}
+	return { kind: 'keyless' };
+}
+
+/**
+ * Work out from the spec alone how a source type expects its verification
+ * secret to be supplied.
+ *
+ * Each outcome needs a different answer from the node: a single named field can
+ * hold a supplied secret, several cannot, a choice of schemes cannot be
+ * inferred, and some types have nowhere to put a secret at all.
+ */
+function specAuthShapeFor(schemas, type) {
 	const config = schemas[`SourceTypeConfig${type}`];
 	// No config schema: an unknown or newer type. Left out of the map entirely so
 	// the node falls back to the common field rather than asserting a shape.
@@ -159,8 +216,9 @@ function render(options, authShapes) {
  * dropdown should not pay that cost every time it opens. \`npm run
  * check:source-types\` fails when this file no longer matches the spec.
  *
- * Choosing a platform type makes Hookdeck apply that platform's own signature
- * verification scheme. \`WEBHOOK\` is the generic type, where the verification
+ * Choosing a platform type lets Hookdeck apply that platform's own signature
+ * verification scheme, once the source carries what the scheme needs (see
+ * \`SOURCE_TYPE_AUTH\`). \`WEBHOOK\` is the generic type, where the verification
  * method is configured explicitly.
  */
 export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
@@ -172,24 +230,30 @@ ${optionLines}
  * from \`SourceTypeConfig*.properties.auth\` (following $refs, inline
  * definitions and \`oneOf\` alike).
  *
- * The three cases are kept structurally distinct because they need different
- * answers, and an array alone cannot tell "takes no secret" apart from "several
- * possible schemes":
+ * The cases are kept structurally distinct because they need different answers,
+ * and an array alone cannot tell "takes no secret" apart from "several possible
+ * schemes":
  *
- * - \`fields\` — the named fields. One means a single supplied secret can be
+ * - \`fields\`  — the named fields. One means a single supplied secret can be
  *   placed correctly; several means it cannot. A type offering a choice of
  *   schemes lands here when one of them is its own, because the node names the
  *   type as the \`auth_type\` and so selects that scheme.
- * - \`choice\` — the type accepts a choice of schemes, none of them its own, so
+ * - \`choice\`  — the type accepts a choice of schemes, none of them its own, so
  *   which fields apply cannot be inferred.
- * - \`none\`   — the type takes no secret at all.
+ * - \`keyless\` — Hookdeck verifies the type with keys it fetches itself, but
+ *   only once the source is created with an \`auth\` object, so the node sends an
+ *   empty one. The spec cannot tell these from \`none\`; the generator lists them.
+ * - \`none\`    — there is nowhere to put a secret. Hookdeck either does not
+ *   verify the type or manages its credential itself.
  *
- * Sending a secret the API does not expect is rejected at activation, so each
- * case is answered explicitly rather than guessed at.
+ * Hookdeck drops a field it does not expect, so a secret in the wrong place
+ * either fails a required-field check at activation or vanishes without a word.
+ * Each case is answered explicitly rather than guessed at.
  */
 export type SourceAuthShape =
 	| { kind: 'fields'; fields: string[] }
 	| { kind: 'choice' }
+	| { kind: 'keyless' }
 	| { kind: 'none' };
 
 export const SOURCE_TYPE_AUTH: Record<string, SourceAuthShape> = {

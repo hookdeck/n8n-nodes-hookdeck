@@ -15,20 +15,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Klaviyo, Knock, MailerSend, MCP Events, Mollie, Notion, Onfleet, Ordinal, Quo,
   SendGrid Inbound Parse, Snipcart, SparkPost, Supabase, Webflow, Whatnot and
   WordPress.com. Azure Event Grid, Ordinal and SendGrid Inbound Parse offer a
-  choice of verification scheme, and Deepgram, Formstack, Grafana, SparkPost and
-  Supabase need several values. One **Webhook Secret** cannot express either, so
-  their verification goes in **Options → Source Config (JSON)**. Docker Hub, Google Pub/Sub and WordPress.com take no
-  secret at all. In both cases the node says so at publish if you fill in
-  **Webhook Secret**, rather than sending something Hookdeck would reject.
+  choice of verification scheme, and Deepgram, Formstack, Google Pub/Sub,
+  Grafana, SparkPost and Supabase need several values. One **Webhook Secret**
+  cannot express either, so their verification goes in **Options → Source
+  Config (JSON)**. Docker Hub and WordPress.com take no secret, and Hookdeck does
+  not verify them. In each case the node says so at publish if you fill in
+  **Webhook Secret**, rather than sending something Hookdeck would reject or
+  silently drop.
 
-### Changed
+### Fixed
 
-- **ShipStation** no longer takes a **Webhook Secret**. Hookdeck stopped
-  accepting the public key it used to ask for, so publishing a new ShipStation
-  source with one filled in now stops with "SHIPSTATION does not take a
-  verification secret" instead of a rejection from Hookdeck. Clear the field
-  and publish again. An existing ShipStation source you picked from the list is
-  not affected unless **Update Existing Source** is on.
+- **AWS SNS** and **ShipStation** sources the trigger creates are now verified.
+  Hookdeck checks both platforms' signatures with keys it fetches itself, but
+  only for a source created with verification switched on. The node never
+  switched it on for AWS SNS, and for ShipStation only when **Webhook Secret**
+  held a public key, so those sources accepted unsigned requests. It now
+  switches it on whenever **Webhook Secret** is empty. ShipStation no longer
+  uses the public key it once asked for, so a new ShipStation source with one
+  filled in now stops at publish with "SHIPSTATION does not take a verification
+  secret". Clear the field and publish again. To
+  turn verification off, set **Options → Source Config (JSON)** to
+  `{"auth": null}`. An existing source you picked from the list is not changed
+  unless **Update Existing Source** is on.
 
 ## [0.3.0] - 2026-09-09
 

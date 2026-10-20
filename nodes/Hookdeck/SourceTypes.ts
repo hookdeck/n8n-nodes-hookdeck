@@ -10,8 +10,9 @@ import type { INodePropertyOptions } from 'n8n-workflow';
  * dropdown should not pay that cost every time it opens. `npm run
  * check:source-types` fails when this file no longer matches the spec.
  *
- * Choosing a platform type makes Hookdeck apply that platform's own signature
- * verification scheme. `WEBHOOK` is the generic type, where the verification
+ * Choosing a platform type lets Hookdeck apply that platform's own signature
+ * verification scheme, once the source carries what the scheme needs (see
+ * `SOURCE_TYPE_AUTH`). `WEBHOOK` is the generic type, where the verification
  * method is configured explicitly.
  */
 export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
@@ -208,24 +209,30 @@ export const SOURCE_TYPE_OPTIONS: INodePropertyOptions[] = [
  * from `SourceTypeConfig*.properties.auth` (following $refs, inline
  * definitions and `oneOf` alike).
  *
- * The three cases are kept structurally distinct because they need different
- * answers, and an array alone cannot tell "takes no secret" apart from "several
- * possible schemes":
+ * The cases are kept structurally distinct because they need different answers,
+ * and an array alone cannot tell "takes no secret" apart from "several possible
+ * schemes":
  *
- * - `fields` — the named fields. One means a single supplied secret can be
+ * - `fields`  — the named fields. One means a single supplied secret can be
  *   placed correctly; several means it cannot. A type offering a choice of
  *   schemes lands here when one of them is its own, because the node names the
  *   type as the `auth_type` and so selects that scheme.
- * - `choice` — the type accepts a choice of schemes, none of them its own, so
+ * - `choice`  — the type accepts a choice of schemes, none of them its own, so
  *   which fields apply cannot be inferred.
- * - `none`   — the type takes no secret at all.
+ * - `keyless` — Hookdeck verifies the type with keys it fetches itself, but
+ *   only once the source is created with an `auth` object, so the node sends an
+ *   empty one. The spec cannot tell these from `none`; the generator lists them.
+ * - `none`    — there is nowhere to put a secret. Hookdeck either does not
+ *   verify the type or manages its credential itself.
  *
- * Sending a secret the API does not expect is rejected at activation, so each
- * case is answered explicitly rather than guessed at.
+ * Hookdeck drops a field it does not expect, so a secret in the wrong place
+ * either fails a required-field check at activation or vanishes without a word.
+ * Each case is answered explicitly rather than guessed at.
  */
 export type SourceAuthShape =
 	| { kind: 'fields'; fields: string[] }
 	| { kind: 'choice' }
+	| { kind: 'keyless' }
 	| { kind: 'none' };
 
 export const SOURCE_TYPE_AUTH: Record<string, SourceAuthShape> = {
@@ -243,7 +250,7 @@ export const SOURCE_TYPE_AUTH: Record<string, SourceAuthShape> = {
 	'ASHBY': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'ATTENTIVE': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'AUTH0': { kind: 'fields', fields: ['api_key'] },
-	'AWS_SNS': { kind: 'none' },
+	'AWS_SNS': { kind: 'keyless' },
 	'AZURE_EVENT_GRID': { kind: 'choice' },
 	'BASELINKER': { kind: 'none' },
 	'BIGCOMMERCE': { kind: 'fields', fields: ['webhook_secret_key'] },
@@ -295,7 +302,7 @@ export const SOURCE_TYPE_AUTH: Record<string, SourceAuthShape> = {
 	'GITHUB': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'GITLAB': { kind: 'fields', fields: ['api_key'] },
 	'GOCARDLESS': { kind: 'fields', fields: ['webhook_secret_key'] },
-	'GOOGLE_PUBSUB': { kind: 'none' },
+	'GOOGLE_PUBSUB': { kind: 'fields', fields: ['audience', 'service_account_email'] },
 	'GRAFANA': { kind: 'fields', fields: ['header_key', 'timestamp_header', 'webhook_secret_key'] },
 	'GREENDOT': { kind: 'fields', fields: ['password', 'username'] },
 	'HOOKDECK_OUTPOST': { kind: 'none' },
@@ -361,7 +368,7 @@ export const SOURCE_TYPE_AUTH: Record<string, SourceAuthShape> = {
 	'SENDGRID_INBOUND': { kind: 'choice' },
 	'SHIPBOB': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'SHIPHERO': { kind: 'fields', fields: ['webhook_secret_key'] },
-	'SHIPSTATION': { kind: 'none' },
+	'SHIPSTATION': { kind: 'keyless' },
 	'SHOPIFY': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'SHOPLINE': { kind: 'fields', fields: ['webhook_secret_key'] },
 	'SLACK': { kind: 'fields', fields: ['webhook_secret_key'] },
