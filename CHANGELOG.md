@@ -8,13 +8,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- 35 more platforms in **Source Type**, bringing it in line with what Hookdeck
+- 36 more platforms in **Source Type**, bringing it in line with what Hookdeck
   supports today: AfterShip, Aircall, Auth0, Azure Event Grid, Bitbucket,
   Calendly, Checkout.com, CircleCI, Clerk, Community.com, Cronofy, Deepgram,
-  Docker Hub, Fanvue, Formstack, Google Pub/Sub, Grafana, Hugging Face, Jira,
-  Klaviyo, Knock, MailerSend, MCP Events, Mollie, Notion, Onfleet, Ordinal, Quo,
-  SendGrid Inbound Parse, Snipcart, SparkPost, Supabase, Webflow, Whatnot and
-  WordPress.com. Azure Event Grid, Ordinal and SendGrid Inbound Parse offer a
+  Docker Hub, Fanvue, Formstack, Google Pub/Sub, Grafana, Hugging Face,
+  incident.io, Jira, Klaviyo, Knock, MailerSend, MCP Events, Mollie, Notion,
+  Onfleet, Ordinal, Quo, SendGrid Inbound Parse, Snipcart, SparkPost, Supabase,
+  Webflow, Whatnot and WordPress.com. Azure Event Grid, Ordinal and SendGrid Inbound Parse offer a
   choice of verification scheme, and Deepgram, Formstack, Google Pub/Sub,
   Grafana, SparkPost and Supabase need several values. One **Webhook Secret**
   cannot express either, so their verification goes in **Options → Source
