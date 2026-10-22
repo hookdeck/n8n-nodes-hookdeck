@@ -35,6 +35,30 @@ project, add a second credential.
 A key from an Outpost project will not work here. Outpost is the outbound path,
 with its own API; these nodes only speak to the Event Gateway.
 
+### How the key is stored, and routes other than the editor
+
+n8n stores the key in its own database, encrypted with the instance's
+`N8N_ENCRYPTION_KEY`, and shows it masked once saved. Pasting it into the
+editor is the usual route, but not the only one:
+
+- **External secrets** (Enterprise, self-hosted or Cloud). Set **API Key** to
+  `{{ $secrets.<vault-name>.<secret> }}` and n8n reads the key from AWS Secrets
+  Manager, Azure Key Vault, GCP Secrets Manager, HashiCorp Vault, Infisical or
+  1Password. This is the answer when policy says secrets are not pasted into
+  UIs.
+- **Credential overwrites** (self-hosted). Setting
+  `CREDENTIALS_OVERWRITE_DATA='{"hookdeckEventGatewayApi":{"apiKey":"<key>"}}'`
+  fills **API Key** on Hookdeck credentials without storing the key in them.
+  The editor then hides the field, so every Hookdeck credential created there
+  uses that key, and so that one project.
+- **Scripted provisioning.** n8n's public API and `n8n import:credentials`
+  create the credential without the editor.
+
+Not `{{ $env.HOOKDECK_API_KEY }}`. n8n 2.x blocks `$env` in expressions
+unless `N8N_BLOCK_ENV_ACCESS_IN_NODE=false`, which reopens environment access
+to every node and Code step on the instance, and n8n Cloud has no environment to
+read. Credential overwrites do the same job without that cost.
+
 ## Setting up the trigger
 
 Set a source name, pick the platform sending the events, and activate the
@@ -56,8 +80,10 @@ configured on the node under **Options**. Every option is listed in the
 **Verification only starts when a secret is set.** Choosing a Source Type tells
 Hookdeck *which* signature scheme that platform uses; it does not enable
 verification on its own. Fill in **Webhook Secret** for platform sources, or
-set **Verification** for generic ones. [Security](security.md) explains why this
-is easy to miss and how to confirm a source is verifying.
+set **Verification** for generic ones. AWS SNS and ShipStation are the
+exception: Hookdeck fetches their signing keys itself, so they take no secret,
+and the node turns their verification on. [Security](security.md) explains why
+this is easy to miss and how to confirm a source is verifying.
 
 ### An existing source is adopted, not rewritten
 

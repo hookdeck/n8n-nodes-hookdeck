@@ -13,7 +13,15 @@ no signing secret accepts an unsigned, forged payload and delivers it — the ed
 answers `200` and records `verified: false`.
 
 So fill in **Webhook Secret** for platform sources, or set **Verification** for
-generic ones. Two things make this easy to miss:
+generic ones.
+
+AWS SNS and ShipStation are the exception. Hookdeck fetches their signing keys
+itself, so there is no secret to enter, but their verification is still off
+unless the source is created with it on. The node does that whenever **Webhook
+Secret** is empty. A source of either type created some other way may not have
+it.
+
+Two things make this easy to miss:
 
 - **The status code is not the verdict.** Hookdeck answers `200` at the edge
   whether or not a payload verified. The answer is the `verified` field on the
