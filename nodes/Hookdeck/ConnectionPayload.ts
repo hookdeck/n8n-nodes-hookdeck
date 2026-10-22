@@ -20,11 +20,12 @@ const DEFAULT_PLATFORM_AUTH_FIELD = 'webhook_secret_key';
  * Resolve which auth field a single supplied secret should populate.
  *
  * Most platforms name it `webhook_secret_key`, but a sizeable minority use
- * `api_key`, `public_key` or similar, and a secret in the wrong field is
- * rejected by the API at activation. Three cases cannot be served by a single
- * input at all — a type needing several values, one accepting a choice of
- * schemes, and one taking no secret — and each is refused with the guidance that
- * fits it, rather than being allowed through to surface as a 422.
+ * `api_key`, `public_key` or similar. Hookdeck drops a field it does not expect,
+ * so a secret in the wrong one fails activation with a 422 when the right field
+ * is required, and disappears without a word when it is not. Several cases
+ * cannot be served by a single input at all — a type needing several values,
+ * one accepting a choice of schemes, and one with nowhere to put a secret — and
+ * each is refused with the guidance that fits it.
  */
 function platformAuthField(this: SourceConfigContext, sourceType: string): string {
 	const shape = SOURCE_TYPE_AUTH[sourceType];
@@ -33,13 +34,26 @@ function platformAuthField(this: SourceConfigContext, sourceType: string): strin
 	// best available guess, and the API says so plainly if it is wrong.
 	if (!shape) return DEFAULT_PLATFORM_AUTH_FIELD;
 
+	// Refused rather than sent, because Hookdeck would drop it silently and the
+	// user would believe the secret was doing something.
+	if (shape.kind === 'keyless') {
+		throw new NodeOperationError(
+			this.getNode(),
+			`${sourceType} does not take a verification secret`,
+			{
+				description:
+					'Leave Webhook Secret empty. Hookdeck verifies this platform with signing keys it fetches from the platform itself, and the node turns that on for you.',
+			},
+		);
+	}
+
 	if (shape.kind === 'none') {
 		throw new NodeOperationError(
 			this.getNode(),
 			`${sourceType} does not take a verification secret`,
 			{
 				description:
-					'Leave Webhook Secret empty. Hookdeck verifies this platform without one, and sending a secret it does not expect is rejected.',
+					'Leave Webhook Secret empty. Hookdeck has nowhere to keep a secret for this platform and would drop one without saying so.',
 			},
 		);
 	}
@@ -124,6 +138,12 @@ export function buildSourceConfig(
 		if (platformSecret) {
 			config.auth_type = sourceType;
 			config.auth = { [platformAuthField.call(this, sourceType)]: platformSecret };
+		} else if (SOURCE_TYPE_AUTH[sourceType]?.kind === 'keyless') {
+			// Hookdeck only creates verification for a source sent with `auth`, even
+			// an empty one. Without it these platforms, which need nothing entered,
+			// accept unsigned requests. Source Config (JSON) of {"auth": null} below
+			// still turns it off, for anyone sending test payloads by hand.
+			config.auth = {};
 		}
 	}
 

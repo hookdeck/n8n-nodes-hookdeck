@@ -221,6 +221,55 @@ test('live API surface', { skip, concurrency: false }, async (t) => {
 		);
 	});
 
+	await t.test('GitLab takes its secret in api_key, under its own scheme', async () => {
+		// GitLab's spec now offers Standard Webhooks beside its own GITLAB scheme.
+		// The node still sends `auth_type: 'GITLAB'` with the secret in `api_key`,
+		// and the spec saying that is valid is not the same as Hookdeck accepting it.
+		const { connection } = await provision(`${PREFIX}-gitlab`, {
+			sourceType: 'GITLAB',
+			platformSecret: 'gitlab-livetest-token',
+		});
+		const source = await api('GET', `/sources/${connection.source.id}`);
+
+		assert.equal(source.type, 'GITLAB');
+		// Unlike the single-scheme platforms above, a type with a choice may echo
+		// the scheme it was given. If it does, that has to be GitLab's own.
+		if (source.config?.auth_type != null) assert.equal(source.config.auth_type, 'GITLAB');
+	});
+
+	await t.test('AWS SNS and ShipStation are verified without a secret', async () => {
+		// Hookdeck verifies both with keys it fetches itself, but creates that
+		// verification only for a source sent with `auth`, even an empty one, and
+		// reports which happened as `authenticated`. The bare source is the
+		// control: if it ever comes back authenticated too, Hookdeck has made this
+		// the default and the node's empty `auth` is no longer doing anything.
+		for (const sourceType of ['AWS_SNS', 'SHIPSTATION']) {
+			const slug = sourceType.toLowerCase().replace(/_/g, '-');
+			const { connection } = await provision(`${PREFIX}-${slug}`, { sourceType });
+			const source = await api('GET', `/sources/${connection.source.id}`);
+
+			assert.equal(source.type, sourceType);
+			assert.ok('authenticated' in source, 'the API stopped reporting authenticated');
+			assert.equal(source.authenticated, true, `${sourceType}: the node's source is not verified`);
+
+			const bare = await api('PUT', '/connections', {
+				name: `${PREFIX}-${slug}-bare`,
+				source: { name: `${PREFIX}-${slug}-bare`, type: sourceType },
+				destination: {
+					name: `${PREFIX}-${slug}-bare-dest`,
+					type: 'HTTP',
+					config: { url: DESTINATION_URL },
+				},
+			});
+			const bareSource = await api('GET', `/sources/${bare.source.id}`);
+			assert.equal(
+				bareSource.authenticated,
+				false,
+				`${sourceType}: a source sent without auth is verified anyway`,
+			);
+		}
+	});
+
 	await t.test('Source Config (JSON) overrides the generated config', async () => {
 		// The merge is one level deep, so `auth` is replaced wholesale rather than
 		// blended. That suits the documented purpose — expressing a scheme the
