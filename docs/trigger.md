@@ -9,9 +9,9 @@ is covered in [Getting started](getting-started.md).
 | Parameter | Description |
 | --- | --- |
 | Source | The Hookdeck source. **From List** shows every source in the project with its public URL, so you can copy the URL for your provider without leaving the canvas. **By Name** takes a new name — letters, numbers, hyphens and underscores — and creates the source on publish. |
-| Source Type | The platform sending events. This selects *which* signature scheme Hookdeck applies; it does not switch verification on by itself — see [Security](security.md#verification-only-starts-when-a-secret-is-set). Use **Webhook (Generic)** to configure verification yourself. Applies when the node creates the source; an existing source keeps its own type. |
+| Source Type | The platform sending events. This selects *which* signature scheme Hookdeck applies; it does not switch verification on by itself, except for AWS SNS and ShipStation, which need no secret — see [Security](security.md#verification-only-starts-when-a-secret-is-set). Use **Webhook (Generic)** to configure verification yourself. Applies when the node creates the source; an existing source keeps its own type. |
 | Verification | For generic sources: HMAC, API Key, Basic Auth, or none. |
-| Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. |
+| Webhook Secret | For platform sources: the signing secret the platform issued you. Placed in whichever field that platform expects. A few platforms need more than one value — those ask you to use Source Config (JSON) instead, and name the fields. AWS SNS and ShipStation take none; leave it empty and the node switches their verification on. |
 | Acknowledgement Mode | **Async Retry** (default) or **Sync**. See [Acknowledgement modes](#acknowledgement-modes). |
 
 ## Options

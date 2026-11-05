@@ -23,6 +23,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   **Webhook Secret**, rather than sending something Hookdeck would reject or
   silently drop.
 
+### Changed
+
+- [Getting started](docs/getting-started.md) now says how n8n stores the API
+  key, and covers the routes other than pasting it into the editor: external
+  secrets, credential overwrites on self-hosted, and n8n's public API and CLI.
+  It also says why `$env` is not one of them.
+
 ### Fixed
 
 - **AWS SNS** and **ShipStation** sources the trigger creates are now verified.

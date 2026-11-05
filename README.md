@@ -115,7 +115,7 @@ Three importable workflows are in [`examples/`](examples/), all built and run ag
 
 Webhook payloads are third-party input, and these nodes treat them that way:
 
-- Provider verification happens at the Hookdeck source, using that platform's own scheme, once you supply its signing secret. That secret lives at the Hookdeck source; the trigger sends it there on publish and never checks a signature with it itself.
+- Provider verification happens at the Hookdeck source, using that platform's own scheme, once you supply its signing secret. AWS SNS and ShipStation need none, and the node switches theirs on. That secret lives at the Hookdeck source; the trigger sends it there on publish and never checks a signature with it itself.
 - Deliveries into n8n carry a second signature, in `x-hookdeck-n8n-signature`, made with a secret the trigger generates on publish. Requests that fail it get `401` and never start the workflow.
 - n8n's own webhook URL is hidden on the trigger. Sending a provider there bypasses Hookdeck and silently loses everything above.
 - A body that is not valid UTF-8 is rejected with `400`, outside the retryable range, rather than parsed into corrupted text.
