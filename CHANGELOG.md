@@ -8,20 +8,20 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- 35 more platforms in **Source Type**, bringing it in line with what Hookdeck
-  supports today: AfterShip, Aircall, Auth0, Azure Event Grid, Bitbucket,
-  Calendly, Checkout.com, CircleCI, Clerk, Community.com, Cronofy, Deepgram,
-  Docker Hub, Fanvue, Formstack, Google Pub/Sub, Grafana, Hugging Face, Jira,
-  Klaviyo, Knock, MailerSend, MCP Events, Mollie, Notion, Onfleet, Ordinal, Quo,
-  SendGrid Inbound Parse, Snipcart, SparkPost, Supabase, Webflow, Whatnot and
-  WordPress.com. Azure Event Grid, Ordinal and SendGrid Inbound Parse offer a
-  choice of verification scheme, and Deepgram, Formstack, Google Pub/Sub,
-  Grafana, SparkPost and Supabase need several values. One **Webhook Secret**
+- 666 more platforms in **Source Type**, which now lists all 817 that Hookdeck
+  supports, among them Auth0, Bitbucket, Calendly, Clerk, incident.io, Jira,
+  Klaviyo, Notion, PostHog, Vanta and Zapier. 527 of them take a single
+  **Webhook Secret**. 132 need several values, such as Deepgram, Google
+  Pub/Sub and Supabase, and Azure Event Grid, Better Stack, Ordinal and SendGrid
+  Inbound Parse offer a choice of verification scheme. One **Webhook Secret**
   cannot express either, so their verification goes in **Options → Source
-  Config (JSON)**. Docker Hub and WordPress.com take no secret, and Hookdeck does
-  not verify them. In each case the node says so at publish if you fill in
-  **Webhook Secret**, rather than sending something Hookdeck would reject or
-  silently drop.
+  Config (JSON)**. Docker Hub, Scaleway Topics and Events and WordPress.com take
+  no secret, and Hookdeck does not verify them. In each case the node says so at
+  publish if you fill in **Webhook Secret**, rather than sending something
+  Hookdeck would reject or silently drop.
+- Platforms that write their name in lower case, such as beehiiv, dbt Cloud and
+  n8n, appear with a capital first letter (Beehiiv, Dbt Cloud, N8n), because
+  n8n's verification rules require every option to be title-cased.
 
 ### Changed
 
