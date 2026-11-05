@@ -45,9 +45,9 @@
 # credential in .npmrc takes precedence over OIDC, so a half-configured or empty
 # secret silently becomes the publishing identity, or fails.
 #
-# OIDC needs npm >= 11.5.1 on Node >= 22.14, which `lts/*` satisfies. The guard
-# below fails loudly rather than silently falling back if that ever stops being
-# true.
+# OIDC needs npm >= 11.5.1 on Node >= 22.14, which Node 24 satisfies (24.22 ships
+# npm 11.19). The guard below fails loudly rather than silently falling back if
+# that ever stops being true.
 name: Publish
 
 on:
@@ -79,7 +79,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 'lts/*'
+          # Not `lts/*`: on Node 26, `npm ci` fails compiling isolated-vm 6.2.0, a dev
+          # dependency that @n8n/expression-runtime pulls in. Move on once it builds.
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
