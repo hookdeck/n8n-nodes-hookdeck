@@ -42,7 +42,9 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: 'lts/*'
+          # Not `lts/*`: on Node 26, `npm ci` fails compiling isolated-vm 6.2.0, a dev
+          # dependency that @n8n/expression-runtime pulls in. Move on once it builds.
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
