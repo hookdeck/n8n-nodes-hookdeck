@@ -179,7 +179,7 @@ function labelFor(schemas, type) {
 	const config = schemas[`SourceTypeConfig${type}`];
 	const auth = deref(schemas, config?.properties?.auth);
 	const label = auth?.['x-docs-type'];
-	if (label) return label;
+	if (label) return capitaliseLowercaseBrand(label);
 
 	// Last resort for a new type whose auth schema carries no label.
 	return type
@@ -187,6 +187,24 @@ function labelFor(schemas, type) {
 		.split(/[_-]/)
 		.map((word) => word.charAt(0).toUpperCase() + word.slice(1))
 		.join(' ');
+}
+
+/**
+ * Upper-cases the first letter of a label that starts with a lower-case word,
+ * so "beehiiv" becomes "Beehiiv" and "dbt Cloud" becomes "Dbt Cloud".
+ *
+ * This is wrong for the brand and done only to pass n8n's verification scan:
+ * `n8n-nodes-base/node-param-display-name-miscased` requires every option name
+ * to equal its title-cased form, and the scan ignores inline `eslint-disable`.
+ * It even turns "n8n" into "N8n". A word containing a period ("incident.io",
+ * "api.video") or starting with a digit ("100ms") is left alone, because
+ * title-casing leaves it alone too. Remove this if n8n relaxes the rule for
+ * brand names.
+ */
+function capitaliseLowercaseBrand(label) {
+	const [first] = label.split(' ');
+	if (!/^[a-z]/.test(first) || first.includes('.')) return label;
+	return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function render(options, authShapes) {
