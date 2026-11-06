@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- The README and [Getting started](docs/getting-started.md) say how to install
+  the node on n8n Cloud and on self-hosted n8n. It is a verified community node,
+  so it installs from the nodes panel on both, and self-hosted n8n can still
+  install it by package name. Both pages still said it was self-hosted only. The README's count of verified platforms, 151, was
+  also out of date. It now says more than 800, which is what v0.4.0 lists.
+
 ## [0.4.0] - 2026-11-05
 
 ### Added
