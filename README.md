@@ -33,7 +33,9 @@ These nodes cover the Event Gateway only — the inbound path. [Outpost](https:/
 ## Quickstart
 
 1. Create a [Hookdeck account](https://dashboard.hookdeck.com/signup) (the free tier is enough) and copy the API key of an Event Gateway project from **Project Settings → Secrets**.
-1. Install the node from the nodes panel in n8n: search for **Hookdeck**, select **Hookdeck Event Gateway** under **More from the community**, and click **Install**. It is a [verified community node](https://n8n.io/integrations/hookdeck-event-gateway/), so this works on n8n Cloud and self-hosted alike. You need to be an instance owner or admin. On a self-hosted instance with verified nodes turned off, install `@hookdeck/n8n-nodes-hookdeck` by name from **Settings → Community Nodes** instead ([guide](https://docs.n8n.io/integrations/community-nodes/installation/)).
+1. Install the node. It is a [verified community node](https://n8n.io/integrations/hookdeck-event-gateway/), on n8n Cloud and on self-hosted n8n. Either way you need to be an instance owner or admin.
+   - **n8n Cloud:** open the nodes panel, search for **Hookdeck**, select **Hookdeck Event Gateway** under **More from the community**, and click **Install**.
+   - **Self-hosted n8n:** install it from the nodes panel the same way, or by package name, `@hookdeck/n8n-nodes-hookdeck`, from **Settings → Community Nodes** ([guide](https://docs.n8n.io/integrations/community-nodes/installation/)). The package-name route also works when verified community nodes are turned off. Your instance doesn't need a public address: if Hookdeck can't reach it, events arrive through the Hookdeck CLI ([Transport](docs/transport.md)).
 1. Create a **Hookdeck Event Gateway API** credential and paste the key. One credential is one project.
 1. Add a **Hookdeck Event Gateway Trigger** to a workflow. Under **Source → By Name** give the source a name, pick the platform sending the events as **Source Type**, and paste that platform's signing secret into **Webhook Secret**.
 1. **Publish** the workflow. The node creates the source and the connection to this workflow.

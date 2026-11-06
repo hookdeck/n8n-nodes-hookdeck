@@ -7,19 +7,29 @@ against.
 ## Install
 
 This is a [verified community node](https://n8n.io/integrations/hookdeck-event-gateway/),
-so it installs from inside the editor on n8n Cloud and on self-hosted n8n:
-
-1. Open the nodes panel (click **+** or press **N**) and search for **Hookdeck**.
-2. Select **Hookdeck Event Gateway** under **More from the community** and click
-   **Install**. You need to be an instance owner or admin. Once it is installed,
-   everyone on the instance can use it.
-
-On a self-hosted instance with verified nodes turned off, install it by package
-name instead: follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
-and use `@hookdeck/n8n-nodes-hookdeck`.
+so it installs on n8n Cloud and on self-hosted n8n. Either way you need to be an
+instance owner or admin, and once it is installed, everyone on the instance can
+use it.
 
 You'll also need a [Hookdeck account](https://dashboard.hookdeck.com/signup);
 the free tier is enough to run real workflows on.
+
+### n8n Cloud
+
+1. Open the nodes panel (click **+** or press **N**) and search for **Hookdeck**.
+2. Select **Hookdeck Event Gateway** under **More from the community** and click
+   **Install**.
+
+### Self-hosted n8n
+
+Install it from the nodes panel, as on n8n Cloud, or by package name: follow the
+[community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
+and use `@hookdeck/n8n-nodes-hookdeck`. The package-name route also works when
+verified community nodes are turned off.
+
+Your instance doesn't need a public address. If Hookdeck can't reach it, for
+example behind NAT, the trigger delivers through the Hookdeck CLI instead.
+[Transport](transport.md) covers both routes.
 
 ## Credentials
 
