@@ -6,16 +6,20 @@ against.
 
 ## Install
 
-Follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
-and use the package name `@hookdeck/n8n-nodes-hookdeck`.
+This is a [verified community node](https://n8n.io/integrations/hookdeck-event-gateway/),
+so it installs from inside the editor on n8n Cloud and on self-hosted n8n:
+
+1. Open the nodes panel (click **+** or press **N**) and search for **Hookdeck**.
+2. Select **Hookdeck Event Gateway** under **More from the community** and click
+   **Install**. You need to be an instance owner or admin. Once it is installed,
+   everyone on the instance can use it.
+
+On a self-hosted instance with verified nodes turned off, install it by package
+name instead: follow the [community nodes installation guide](https://docs.n8n.io/integrations/community-nodes/installation/)
+and use `@hookdeck/n8n-nodes-hookdeck`.
 
 You'll also need a [Hookdeck account](https://dashboard.hookdeck.com/signup);
 the free tier is enough to run real workflows on.
-
-**Self-hosted n8n today.** n8n Cloud installs only community nodes on n8n's
-[verified list](https://docs.n8n.io/integrations/community-nodes/installation/verified-install/),
-and this package is not on it yet — the submission is pending. Self-hosted
-instances can install any community package, so that is where it runs for now.
 
 ## Credentials
 

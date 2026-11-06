@@ -2,9 +2,6 @@
 
 Known boundaries, stated so nobody discovers them in production.
 
-- **Self-hosted n8n only, for now.** n8n Cloud installs only verified community
-  nodes and this package's verification submission is pending.
-
 - **Sync acknowledgement is capped at 60 seconds.** Hookdeck stops waiting after
   that, so a workflow that takes longer must use Async Retry, and with it takes
   on recovery itself — see below.

@@ -1,6 +1,6 @@
 # @hookdeck/n8n-nodes-hookdeck
 
-**Reliable webhooks for n8n.** Put the [Hookdeck Event Gateway](https://hookdeck.com) in front of your workflows' inbound webhooks: signature verification for 151 providers, deduplication, a durable queue that survives restarts and unpublished workflows, and retries you can route on from inside the workflow.
+**Reliable webhooks for n8n.** Put the [Hookdeck Event Gateway](https://hookdeck.com) in front of your workflows' inbound webhooks: signature verification for more than 800 platforms, deduplication, a durable queue that survives restarts and unpublished workflows, and retries you can route on from inside the workflow.
 
 Install from n8n's community nodes panel with the package name:
 
@@ -19,7 +19,7 @@ This package puts Hookdeck in between and makes its guarantees options on the tr
 | Events lost while n8n is down, deploying, or the workflow is unpublished | Queued durably at Hookdeck. Unpublishing pauses delivery; publishing again delivers everything that arrived in the gap |
 | A delivery n8n did not accept is gone | Retried up to 50 times with exponential or linear backoff, and `isLastAttempt` on the payload for a dead-letter branch |
 | Provider retries run the workflow twice | Deduplicated at ingest (60 s window by default), plus a stable idempotency key on every delivery |
-| No signature verification unless you build it | Verified at the edge with each platform's own scheme (Stripe, Shopify, GitHub, Twilio and 147 more), or HMAC / API key / basic auth for generic sources. Deliveries into n8n are separately signed |
+| No signature verification unless you build it | Verified at the edge with each platform's own scheme (Stripe, Shopify, GitHub, Twilio and hundreds more), or HMAC / API key / basic auth for generic sources. Deliveries into n8n are separately signed |
 | A burst, or one busy tenant, hits n8n at full speed | Delivery rate and concurrency capped upstream, including per-customer limits keyed on a payload path |
 | Debugging means the execution log | Events, attempts, requests and issues inspected, retried and replayed as workflow steps, or in the Hookdeck dashboard |
 
@@ -33,7 +33,7 @@ These nodes cover the Event Gateway only — the inbound path. [Outpost](https:/
 ## Quickstart
 
 1. Create a [Hookdeck account](https://dashboard.hookdeck.com/signup) (the free tier is enough) and copy the API key of an Event Gateway project from **Project Settings → Secrets**.
-1. Install `@hookdeck/n8n-nodes-hookdeck` from **Settings → Community Nodes** in n8n ([guide](https://docs.n8n.io/integrations/community-nodes/installation/)). n8n Cloud installs only [verified](https://docs.n8n.io/integrations/community-nodes/installation/verified-install/) community nodes and this package's submission is pending, so for now it runs on self-hosted n8n.
+1. Install the node from the nodes panel in n8n: search for **Hookdeck**, select **Hookdeck Event Gateway** under **More from the community**, and click **Install**. It is a [verified community node](https://n8n.io/integrations/hookdeck-event-gateway/), so this works on n8n Cloud and self-hosted alike. You need to be an instance owner or admin. On a self-hosted instance with verified nodes turned off, install `@hookdeck/n8n-nodes-hookdeck` by name from **Settings → Community Nodes** instead ([guide](https://docs.n8n.io/integrations/community-nodes/installation/)).
 1. Create a **Hookdeck Event Gateway API** credential and paste the key. One credential is one project.
 1. Add a **Hookdeck Event Gateway Trigger** to a workflow. Under **Source → By Name** give the source a name, pick the platform sending the events as **Source Type**, and paste that platform's signing secret into **Webhook Secret**.
 1. **Publish** the workflow. The node creates the source and the connection to this workflow.
@@ -123,7 +123,6 @@ Webhook payloads are third-party input, and these nodes treat them that way:
 
 ## Limitations
 
-- Self-hosted n8n only until the verified-node submission lands.
 - Sync acknowledgement is capped at 60 seconds. Longer workflows use Async Retry, and recover failed runs with **Event → Retry** rather than Hookdeck's retry rules.
 - The trigger has no completion hook, so deduplication is Hookdeck's Deduplication Window rather than a local ledger. Key on `hookdeck.idempotencyKey` for a stricter guarantee.
 - On the CLI route, a connection with no `hookdeck listen` session records no event at all, and Delivery Rate Limit and Delivery Group are unavailable.
