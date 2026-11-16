@@ -26,10 +26,10 @@ const TARGET = resolve(HERE, '../nodes/Hookdeck/SourceTypes.ts');
 const DEFAULT_SPEC = 'https://api.hookdeck.com/2025-07-01/openapi';
 
 /**
- * Display names to use instead of the spec's `x-hookdeck-label`.
+ * Display names to use instead of the spec's label.
  *
- * `x-hookdeck-label` is the name Hookdeck's dashboard shows, published on each
- * type's `SourceTypeConfig*` schema. Fix a wrong name there, in Hookdeck's
+ * The label is the name Hookdeck's dashboard shows, published in the
+ * `x-hookdeck-labels` map on `Source.type`. Fix a wrong name there, in Hookdeck's
  * source type definitions, so the dashboard, the docs and this node agree.
  * Only names that need to differ in a 180-entry dropdown belong here.
  */
@@ -158,25 +158,10 @@ function specAuthShapeFor(schemas, type) {
 	return fieldsShape(auth);
 }
 
-/**
- * Each type's `SourceTypeConfig*` schema, keyed by the type it names in
- * `x-docs-type`. Looked up this way rather than by building the schema name,
- * which Hookdeck derives from the type ("PROPERTY-FINDER" is
- * `SourceTypeConfigPROPERTYFINDER`).
- */
-function typeConfigsByType(schemas) {
-	const configs = {};
-	for (const option of schemas.SourceTypeConfig?.oneOf ?? []) {
-		const config = deref(schemas, option);
-		if (config?.['x-docs-type']) configs[config['x-docs-type']] = config;
-	}
-	return configs;
-}
-
-function labelFor(typeConfigs, type) {
+function labelFor(labels, type) {
 	if (type in LABEL_OVERRIDES) return LABEL_OVERRIDES[type];
 
-	const label = typeConfigs[type]?.['x-hookdeck-label'];
+	const label = labels[type];
 	if (label) return capitaliseLowercaseBrand(label);
 
 	// Last resort for a type the spec gives no label.
@@ -302,14 +287,15 @@ if (!Array.isArray(types) || types.length === 0) {
 	throw new Error('Source.properties.type.enum is missing from the spec — has the schema moved?');
 }
 
-const typeConfigs = typeConfigsByType(schemas);
-if (!Object.values(typeConfigs).some((config) => config['x-hookdeck-label'])) {
+// Each type's label, keyed by type, published beside the enum on Source.type.
+const labels = schemas.Source?.properties?.type?.['x-hookdeck-labels'];
+if (!labels) {
 	throw new Error(
-		'No SourceTypeConfig* schema has an x-hookdeck-label. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
+		'Source.properties.type has no x-hookdeck-labels. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
 	);
 }
 const options = types
-	.map((value) => ({ name: labelFor(typeConfigs, value), value }))
+	.map((value) => ({ name: labelFor(labels, value), value }))
 	// Sorted by display name, which is the order the dropdown shows.
 	.sort((a, b) => a.name.localeCompare(b.name));
 
