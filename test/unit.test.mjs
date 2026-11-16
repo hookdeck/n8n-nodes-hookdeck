@@ -311,9 +311,10 @@ test('a choice of schemes that includes the type itself resolves to that scheme'
 	assert.equal(SOURCE_TYPE_AUTH.SENDGRID_INBOUND.kind, 'choice');
 });
 
-test('labels the spec cannot supply are not left to title-casing', () => {
-	// A choice of auth schemes carries no `x-docs-type` of its own, so these
-	// would otherwise read "Gitlab" and "Sendgrid Inbound".
+test('labels come from the spec, including types with a choice of auth schemes', () => {
+	// These used to be read from the auth schema's `x-docs-type`, which a choice of
+	// schemes doesn't carry, so they fell back to "Gitlab" and "Sendgrid Inbound".
+	// `x-docs-label` is on every type's own schema.
 	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
 	assert.equal(label('GITLAB'), 'GitLab');
 	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
