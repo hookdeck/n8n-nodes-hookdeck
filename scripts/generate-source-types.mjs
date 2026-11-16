@@ -160,7 +160,7 @@ function specAuthShapeFor(schemas, type) {
 
 /**
  * Each type's `SourceTypeConfig*` schema, keyed by the type it names in
- * `x-hookdeck-type`. Looked up this way rather than by building the schema name,
+ * `x-docs-type`. Looked up this way rather than by building the schema name,
  * which Hookdeck derives from the type ("PROPERTY-FINDER" is
  * `SourceTypeConfigPROPERTYFINDER`).
  */
@@ -168,7 +168,7 @@ function typeConfigsByType(schemas) {
 	const configs = {};
 	for (const option of schemas.SourceTypeConfig?.oneOf ?? []) {
 		const config = deref(schemas, option);
-		if (config?.['x-hookdeck-type']) configs[config['x-hookdeck-type']] = config;
+		if (config?.['x-docs-type']) configs[config['x-docs-type']] = config;
 	}
 	return configs;
 }
@@ -305,7 +305,7 @@ if (!Array.isArray(types) || types.length === 0) {
 const typeConfigs = typeConfigsByType(schemas);
 if (!Object.values(typeConfigs).some((config) => config['x-hookdeck-label'])) {
 	throw new Error(
-		'No SourceTypeConfig* schema has an x-hookdeck-label. The labels come from the spec, so this needs a Hookdeck API that publishes x-hookdeck-type and x-hookdeck-label.',
+		'No SourceTypeConfig* schema has an x-hookdeck-label. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
 	);
 }
 const options = types
