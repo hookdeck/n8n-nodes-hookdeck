@@ -26,9 +26,9 @@ const TARGET = resolve(HERE, '../nodes/Hookdeck/SourceTypes.ts');
 const DEFAULT_SPEC = 'https://api.hookdeck.com/2025-07-01/openapi';
 
 /**
- * Display names to use instead of the spec's `x-docs-label`.
+ * Display names to use instead of the spec's `x-hookdeck-label`.
  *
- * `x-docs-label` is the name Hookdeck's dashboard shows, published on each
+ * `x-hookdeck-label` is the name Hookdeck's dashboard shows, published on each
  * type's `SourceTypeConfig*` schema. Fix a wrong name there, in Hookdeck's
  * source type definitions, so the dashboard, the docs and this node agree.
  * Only names that need to differ in a 180-entry dropdown belong here.
@@ -176,7 +176,7 @@ function typeConfigsByType(schemas) {
 function labelFor(typeConfigs, type) {
 	if (type in LABEL_OVERRIDES) return LABEL_OVERRIDES[type];
 
-	const label = typeConfigs[type]?.['x-docs-label'];
+	const label = typeConfigs[type]?.['x-hookdeck-label'];
 	if (label) return capitaliseLowercaseBrand(label);
 
 	// Last resort for a type the spec gives no label.
@@ -303,9 +303,9 @@ if (!Array.isArray(types) || types.length === 0) {
 }
 
 const typeConfigs = typeConfigsByType(schemas);
-if (!Object.values(typeConfigs).some((config) => config['x-docs-label'])) {
+if (!Object.values(typeConfigs).some((config) => config['x-hookdeck-label'])) {
 	throw new Error(
-		'No SourceTypeConfig* schema has an x-docs-label. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
+		'No SourceTypeConfig* schema has an x-hookdeck-label. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
 	);
 }
 const options = types

@@ -314,7 +314,7 @@ test('a choice of schemes that includes the type itself resolves to that scheme'
 test('labels come from the spec, including types with a choice of auth schemes', () => {
 	// These used to be read from the auth schema's `x-docs-type`, which a choice of
 	// schemes doesn't carry, so they fell back to "Gitlab" and "Sendgrid Inbound".
-	// `x-docs-label` is on every type's own schema.
+	// `x-hookdeck-label` is on every type's own schema.
 	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
 	assert.equal(label('GITLAB'), 'GitLab');
 	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
