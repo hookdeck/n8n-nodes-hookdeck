@@ -13,6 +13,17 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   so it installs from the nodes panel on both, and self-hosted n8n can still
   install it by package name. Both pages still said it was self-hosted only. The README's count of verified platforms, 151, was
   also out of date. It now says more than 800, which is what v0.4.0 lists.
+- Source Type names in the dropdown now match the names Hookdeck shows, for
+  example HubSpot, PayPal and Customer.io. The node used to keep its own fixes
+  for some names; it now reads them from Hookdeck's API spec. Six new Source
+  Types are listed: Chatbase, Dial, Facebook Messenger, Instagram, LiveKit and
+  Render. Workflows keep working: each Source Type's value is unchanged.
+
+### Fixed
+
+- Property Finder now offers the Webhook Secret Key field. The node didn't find
+  Property Finder's settings in the API spec, so it offered no secret field,
+  although Hookdeck requires one to verify Property Finder's webhooks.
 
 ## [0.4.0] - 2026-11-05
 

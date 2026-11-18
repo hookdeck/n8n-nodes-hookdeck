@@ -131,6 +131,28 @@ function authShapeFor(schemas, type) {
 	return { kind: 'keyless' };
 }
 
+const typeConfigCache = new WeakMap();
+
+/**
+ * A type's config schema, found through the `x-docs-type` each schema in
+ * `SourceTypeConfig.oneOf` carries. The schema name can't be built from the
+ * type: `PROPERTY-FINDER`'s is `SourceTypeConfigPROPERTYFINDER`, so building it
+ * found nothing and Property Finder was offered as taking no secret, when the
+ * spec requires `webhook_secret_key`.
+ */
+function typeConfigFor(schemas, type) {
+	let configs = typeConfigCache.get(schemas);
+	if (!configs) {
+		configs = new Map();
+		for (const ref of schemas.SourceTypeConfig?.oneOf ?? []) {
+			const config = deref(schemas, ref);
+			if (config?.['x-docs-type']) configs.set(config['x-docs-type'], config);
+		}
+		typeConfigCache.set(schemas, configs);
+	}
+	return configs.get(type);
+}
+
 /**
  * Work out from the spec alone how a source type expects its verification
  * secret to be supplied.
@@ -140,7 +162,7 @@ function authShapeFor(schemas, type) {
  * inferred, and some types have nowhere to put a secret at all.
  */
 function specAuthShapeFor(schemas, type) {
-	const config = schemas[`SourceTypeConfig${type}`];
+	const config = typeConfigFor(schemas, type);
 	// No config schema: an unknown or newer type. Left out of the map entirely so
 	// the node falls back to the common field rather than asserting a shape.
 	if (!config) return undefined;
@@ -298,6 +320,22 @@ const options = types
 	.map((value) => ({ name: labelFor(labels, value), value }))
 	// Sorted by display name, which is the order the dropdown shows.
 	.sort((a, b) => a.name.localeCompare(b.name));
+
+// Two types with one label are two entries the dropdown can't tell apart. The
+// spec labels HOOKDECK_OUTPOST "Managed", the same as MANAGED, which is why it is
+// in LABEL_OVERRIDES; this catches the next one.
+const typesByLabel = new Map();
+for (const { name, value } of options) {
+	typesByLabel.set(name, [...(typesByLabel.get(name) ?? []), value]);
+}
+const sharedLabels = [...typesByLabel].filter(([, values]) => values.length > 1);
+if (sharedLabels.length > 0) {
+	throw new Error(
+		`These Source types share a label, so the dropdown can't tell them apart: ${sharedLabels
+			.map(([name, values]) => `"${name}" (${values.join(', ')})`)
+			.join('; ')}. Give one of each a LABEL_OVERRIDES entry.`,
+	);
+}
 
 const authShapes = {};
 for (const type of [...types].sort()) {
