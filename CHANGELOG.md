@@ -15,9 +15,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   also out of date. It now says more than 800, which is what v0.4.0 lists.
 - Source Type names in the dropdown now match the names Hookdeck shows, for
   example HubSpot, PayPal and Customer.io. The node used to keep its own fixes
-  for some names; it now reads them from Hookdeck's API spec. Six new Source
-  Types are listed: Chatbase, Dial, Facebook Messenger, Instagram, LiveKit and
-  Render. Workflows keep working: each Source Type's value is unchanged.
+  for some names; it now reads them from Hookdeck's API spec. Nine new Source
+  Types are listed: bundle.social, Chatbase, Dial, Facebook Messenger,
+  Instagram, LiveKit, Pylon (usepylon.com), Render and Sentry. Workflows keep
+  working, because each Source Type's value is unchanged.
 
 ### Fixed
 
