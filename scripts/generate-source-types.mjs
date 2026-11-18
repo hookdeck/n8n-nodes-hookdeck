@@ -26,35 +26,20 @@ const TARGET = resolve(HERE, '../nodes/Hookdeck/SourceTypes.ts');
 const DEFAULT_SPEC = 'https://api.hookdeck.com/2025-07-01/openapi';
 
 /**
- * Display names to use instead of the spec's `x-docs-type`.
+ * Display names to use instead of the spec's label.
  *
- * The spec is the better source for most labels — it knows "DocuSign" and
- * "GoCardless" where a mechanical title-casing would not — but a handful are
- * absent, ambiguous in a dropdown, or plainly wrong. Each one here is an
- * exception with a reason, so a new platform still gets its label for free.
+ * The label is the name Hookdeck's dashboard shows, published in the
+ * `x-hookdeck-labels` map on `Source.type`. Fix a wrong name there, in Hookdeck's
+ * source type definitions, so the dashboard, the docs and this node agree.
+ * Only names that need to differ in a 180-entry dropdown belong here.
  */
 const LABEL_OVERRIDES = {
-	// No `x-docs-type` in the spec: these are Hookdeck's own types, not platforms.
+	// The spec says "Webhook"; the dropdown needs to say it is the generic type.
 	WEBHOOK: 'Webhook (Generic)',
-	HTTP: 'HTTP',
-	MANAGED: 'Managed',
-	// No source type config schema at all, so nothing to read a label from.
-	'PROPERTY-FINDER': 'Property Finder',
-	// The spec labels this "Managed", which collides with the MANAGED type above.
+	// The spec labels this "Managed", which collides with the MANAGED type.
 	HOOKDECK_OUTPOST: 'Hookdeck Outpost',
 	// The spec says "X". Alone in a 180-entry dropdown that is unrecognisable.
 	TWITTER: 'X (Twitter)',
-	// A choice of auth schemes carries no `x-docs-type` of its own, so these fall
-	// through to title-casing. GitLab was labelled correctly until it gained a
-	// second scheme, after which it read "Gitlab".
-	GITLAB: 'GitLab',
-	SENDGRID_INBOUND: 'SendGrid Inbound Parse',
-	// Vendor casing the spec gets wrong.
-	SENDGRID: 'SendGrid',
-	CLOUDSIGNAL: 'CloudSignal',
-	THREE_D_EYE: '3DEYE',
-	// The product is "Front"; "FrontApp" is the legacy name.
-	FRONTAPP: 'Front',
 };
 
 /**
@@ -146,6 +131,28 @@ function authShapeFor(schemas, type) {
 	return { kind: 'keyless' };
 }
 
+const typeConfigCache = new WeakMap();
+
+/**
+ * A type's config schema, found through the `x-docs-type` each schema in
+ * `SourceTypeConfig.oneOf` carries. The schema name can't be built from the
+ * type: `PROPERTY-FINDER`'s is `SourceTypeConfigPROPERTYFINDER`, so building it
+ * found nothing and Property Finder was offered as taking no secret, when the
+ * spec requires `webhook_secret_key`.
+ */
+function typeConfigFor(schemas, type) {
+	let configs = typeConfigCache.get(schemas);
+	if (!configs) {
+		configs = new Map();
+		for (const ref of schemas.SourceTypeConfig?.oneOf ?? []) {
+			const config = deref(schemas, ref);
+			if (config?.['x-docs-type']) configs.set(config['x-docs-type'], config);
+		}
+		typeConfigCache.set(schemas, configs);
+	}
+	return configs.get(type);
+}
+
 /**
  * Work out from the spec alone how a source type expects its verification
  * secret to be supplied.
@@ -155,7 +162,7 @@ function authShapeFor(schemas, type) {
  * inferred, and some types have nowhere to put a secret at all.
  */
 function specAuthShapeFor(schemas, type) {
-	const config = schemas[`SourceTypeConfig${type}`];
+	const config = typeConfigFor(schemas, type);
 	// No config schema: an unknown or newer type. Left out of the map entirely so
 	// the node falls back to the common field rather than asserting a shape.
 	if (!config) return undefined;
@@ -173,15 +180,13 @@ function specAuthShapeFor(schemas, type) {
 	return fieldsShape(auth);
 }
 
-function labelFor(schemas, type) {
+function labelFor(labels, type) {
 	if (type in LABEL_OVERRIDES) return LABEL_OVERRIDES[type];
 
-	const config = schemas[`SourceTypeConfig${type}`];
-	const auth = deref(schemas, config?.properties?.auth);
-	const label = auth?.['x-docs-type'];
+	const label = labels[type];
 	if (label) return capitaliseLowercaseBrand(label);
 
-	// Last resort for a new type whose auth schema carries no label.
+	// Last resort for a type the spec gives no label.
 	return type
 		.toLowerCase()
 		.split(/[_-]/)
@@ -304,10 +309,33 @@ if (!Array.isArray(types) || types.length === 0) {
 	throw new Error('Source.properties.type.enum is missing from the spec — has the schema moved?');
 }
 
+// Each type's label, keyed by type, published beside the enum on Source.type.
+const labels = schemas.Source?.properties?.type?.['x-hookdeck-labels'];
+if (!labels) {
+	throw new Error(
+		'Source.properties.type has no x-hookdeck-labels. The labels come from the spec, so this needs a Hookdeck API that publishes them.',
+	);
+}
 const options = types
-	.map((value) => ({ name: labelFor(schemas, value), value }))
+	.map((value) => ({ name: labelFor(labels, value), value }))
 	// Sorted by display name, which is the order the dropdown shows.
 	.sort((a, b) => a.name.localeCompare(b.name));
+
+// Two types with one label are two entries the dropdown can't tell apart. The
+// spec labels HOOKDECK_OUTPOST "Managed", the same as MANAGED, which is why it is
+// in LABEL_OVERRIDES; this catches the next one.
+const typesByLabel = new Map();
+for (const { name, value } of options) {
+	typesByLabel.set(name, [...(typesByLabel.get(name) ?? []), value]);
+}
+const sharedLabels = [...typesByLabel].filter(([, values]) => values.length > 1);
+if (sharedLabels.length > 0) {
+	throw new Error(
+		`These Source types share a label, so the dropdown can't tell them apart: ${sharedLabels
+			.map(([name, values]) => `"${name}" (${values.join(', ')})`)
+			.join('; ')}. Give one of each a LABEL_OVERRIDES entry.`,
+	);
+}
 
 const authShapes = {};
 for (const type of [...types].sort()) {

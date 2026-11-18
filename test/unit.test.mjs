@@ -12,6 +12,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
 	SIGNATURE_HEADER,
@@ -311,9 +315,10 @@ test('a choice of schemes that includes the type itself resolves to that scheme'
 	assert.equal(SOURCE_TYPE_AUTH.SENDGRID_INBOUND.kind, 'choice');
 });
 
-test('labels the spec cannot supply are not left to title-casing', () => {
-	// A choice of auth schemes carries no `x-docs-type` of its own, so these
-	// would otherwise read "Gitlab" and "Sendgrid Inbound".
+test('labels come from the spec, including types with a choice of auth schemes', () => {
+	// These used to be read from the auth schema's `x-docs-type`, which a choice of
+	// schemes doesn't carry, so they fell back to "Gitlab" and "Sendgrid Inbound".
+	// `x-hookdeck-labels` on Source.type has every type's label.
 	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
 	assert.equal(label('GITLAB'), 'GitLab');
 	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
@@ -473,6 +478,45 @@ test('source types include the generic and common platform values', () => {
 test('source type options are sorted by display name', () => {
 	const names = SOURCE_TYPE_OPTIONS.map((o) => o.name.toLowerCase());
 	assert.deepEqual(names, [...names].sort());
+});
+
+test('a type whose schema name drops its dash still gets its auth shape', () => {
+	// PROPERTY-FINDER's config schema is SourceTypeConfigPROPERTYFINDER. Building the
+	// name from the type found nothing, and the node offered no secret field.
+	assert.deepEqual(SOURCE_TYPE_AUTH['PROPERTY-FINDER'], {
+		kind: 'fields',
+		fields: ['webhook_secret_key'],
+	});
+});
+
+/** Runs the generator in check mode against a spec written to a temp file. */
+function generateFrom(spec) {
+	const file = join(mkdtempSync(join(tmpdir(), 'source-types-')), 'openapi.json');
+	writeFileSync(file, JSON.stringify(spec));
+	return spawnSync(
+		process.execPath,
+		['scripts/generate-source-types.mjs', '--check', '--spec', file],
+		{ encoding: 'utf8' },
+	);
+}
+
+const specWithType = (type) => ({ components: { schemas: { Source: { properties: { type } } } } });
+
+test('the generator fails on a spec without x-hookdeck-labels', () => {
+	const result = generateFrom(specWithType({ enum: ['STRIPE'] }));
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /no x-hookdeck-labels/);
+});
+
+test('the generator fails when two types share a label', () => {
+	const result = generateFrom(
+		specWithType({
+			enum: ['PYLON', 'PYLON_SUPPORT'],
+			'x-hookdeck-labels': { PYLON: 'Pylon', PYLON_SUPPORT: 'Pylon' },
+		}),
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /share a label.*"Pylon" \(PYLON, PYLON_SUPPORT\)/);
 });
 
 /** Walk every property, including nested collection options. */
