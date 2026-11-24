@@ -29,7 +29,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Fiserv, Formstack, Grafana and Vapi now accept a Webhook Secret. The node
   counted their optional settings, such as a custom signature header name, as
   values it needed, so it refused the secret and asked for Source Config (JSON)
-  instead. It now fills the one field Hookdeck requires.
+  instead. It now fills the one field Hookdeck requires. Two of them can still
+  need more than the secret, set through Source Config (JSON): Fiserv needs a
+  `store_name` when Fiserv's payloads don't carry `storename`, and Grafana needs
+  a `timestamp_header` when the contact point sends a timestamp header.
 
 - Property Finder now offers the Webhook Secret Key field. The node didn't find
   Property Finder's settings in the API spec, so it offered no secret field,

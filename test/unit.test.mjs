@@ -497,6 +497,12 @@ test('optional auth fields do not stop a single secret being placed', () => {
 	assert.deepEqual(SOURCE_TYPE_AUTH.LOKALISE, { kind: 'fields', fields: ['api_key'] });
 	assert.deepEqual(SOURCE_TYPE_AUTH.BUILDKITE, { kind: 'fields', fields: ['api_key'] });
 
+	// These shipped in 0.4.0 refusing a Webhook Secret, because optional settings
+	// (a store name, header names, an algorithm) were counted as needed.
+	for (const type of ['FISERV', 'FORMSTACK', 'GRAFANA', 'VAPI']) {
+		assert.deepEqual(SOURCE_TYPE_AUTH[type], { kind: 'fields', fields: ['webhook_secret_key'] }, type);
+	}
+
 	// Several fields and none required: the secret's field is named explicitly.
 	assert.deepEqual(SOURCE_TYPE_AUTH.ONSHAPE, { kind: 'fields', fields: ['webhook_secret_key'] });
 	assert.deepEqual(SOURCE_TYPE_AUTH.GRAFANA, { kind: 'fields', fields: ['webhook_secret_key'] });
@@ -557,6 +563,42 @@ test('the generator fails when it cannot tell which field takes the secret', () 
 	});
 	assert.notEqual(result.status, 0);
 	assert.match(result.stderr, /ACME offers fields \[primary_key, secondary_key\] and requires none/);
+});
+
+/** A spec with one Source type and the given auth schema. */
+const specWithAuth = (type, auth) => ({
+	components: {
+		schemas: {
+			Source: { properties: { type: { enum: [type], 'x-hookdeck-labels': { [type]: type } } } },
+			SourceTypeConfig: { oneOf: [{ 'x-docs-type': type, properties: { auth } }] },
+		},
+	},
+});
+
+test('the generator fails when a PRIMARY_SECRET_FIELD entry no longer applies', () => {
+	// Onshape gains a required field: the entry would now override the spec.
+	const nowRequired = generateFrom(
+		specWithAuth('ONSHAPE', {
+			properties: { webhook_secret_key: {}, secondary_webhook_secret_key: {} },
+			required: ['webhook_secret_key'],
+		}),
+	);
+	assert.notEqual(nowRequired.status, 0);
+	assert.match(nowRequired.stderr, /ONSHAPE is in PRIMARY_SECRET_FIELD/);
+
+	// No type reaches the entries at all, as when a type is removed or becomes a
+	// choice of schemes.
+	const unused = generateFrom(specWithAuth('ACME', { properties: { webhook_secret_key: {} } }));
+	assert.notEqual(unused.status, 0);
+	assert.match(unused.stderr, /PRIMARY_SECRET_FIELD has entries no Source type uses: GRAFANA, ONSHAPE/);
+});
+
+test('the generator fails when a required field has no property', () => {
+	const result = generateFrom(
+		specWithAuth('ACME', { properties: { header_key: {} }, required: ['webhook_secret_key'] }),
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /ACME requires \[webhook_secret_key\], which its auth schema does not define/);
 });
 
 /** Walk every property, including nested collection options. */

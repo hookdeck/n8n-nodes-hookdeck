@@ -111,13 +111,26 @@ const PRIMARY_SECRET_FIELD = {
  * Webhook Secret it had been sending correctly. Optional fields stay reachable
  * through Source Config (JSON).
  */
+/** Entries `fieldsShape` reached, so one that no type reaches can be reported. */
+const usedPrimarySecretFields = new Set();
+
 function fieldsShape(auth, type) {
 	const fields = Object.keys(auth.properties ?? {}).sort();
 	if (fields.length === 0) return { kind: 'none' };
 
+	// A required name with no property behind it means the schema is malformed or
+	// has moved; filtering it out could pass off an optional field as the secret.
+	const unknown = (auth.required ?? []).filter((field) => !fields.includes(field));
+	if (unknown.length > 0) {
+		throw new Error(
+			`${type} requires [${unknown.join(', ')}], which its auth schema does not define. Check the spec.`,
+		);
+	}
+
 	const required = fields.filter((field) => auth.required?.includes(field));
 	const primary = PRIMARY_SECRET_FIELD[type];
 	if (primary) {
+		usedPrimarySecretFields.add(type);
 		// Like KEYLESS_VERIFICATION, the entry only holds while the spec still leaves
 		// the choice open. Failing here makes the weekly drift check report it.
 		if (required.length > 0 || !fields.includes(primary)) {
@@ -390,6 +403,20 @@ const authShapes = {};
 for (const type of [...types].sort()) {
 	const shape = authShapeFor(schemas, type);
 	if (shape) authShapes[type] = shape;
+}
+
+// An entry is only checked when its type's auth schema reaches fieldsShape. If the
+// type is removed, loses its config schema or becomes a choice of schemes, the
+// entry would sit unused without a word, so report it here instead.
+const unusedPrimarySecretFields = Object.keys(PRIMARY_SECRET_FIELD).filter(
+	(type) => !usedPrimarySecretFields.has(type),
+);
+if (unusedPrimarySecretFields.length > 0) {
+	throw new Error(
+		`PRIMARY_SECRET_FIELD has entries no Source type uses: ${unusedPrimarySecretFields.join(
+			', ',
+		)}. Check how Hookdeck verifies them now and update the list.`,
+	);
 }
 
 const generated = render(options, authShapes);
