@@ -489,6 +489,22 @@ test('a type whose schema name drops its dash still gets its auth shape', () => 
 	});
 });
 
+test('optional auth fields do not stop a single secret being placed', () => {
+	// The spec added a second key for rotation to Box, a header name override to
+	// Lokalise and a verification mode to Buildkite. Counting those as needed made
+	// the node refuse the Webhook Secret it had been sending correctly.
+	assert.deepEqual(SOURCE_TYPE_AUTH.BOX, { kind: 'fields', fields: ['webhook_secret_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.LOKALISE, { kind: 'fields', fields: ['api_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.BUILDKITE, { kind: 'fields', fields: ['api_key'] });
+
+	// Several fields and none required: the secret's field is named explicitly.
+	assert.deepEqual(SOURCE_TYPE_AUTH.ONSHAPE, { kind: 'fields', fields: ['webhook_secret_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.GRAFANA, { kind: 'fields', fields: ['webhook_secret_key'] });
+
+	// Two required values still can't come from one secret.
+	assert.deepEqual(SOURCE_TYPE_AUTH.ZOHO_CRM, { kind: 'fields', fields: ['api_key', 'header_key'] });
+});
+
 /** Runs the generator in check mode against a spec written to a temp file. */
 function generateFrom(spec) {
 	const file = join(mkdtempSync(join(tmpdir(), 'source-types-')), 'openapi.json');
@@ -517,6 +533,30 @@ test('the generator fails when two types share a label', () => {
 	);
 	assert.notEqual(result.status, 0);
 	assert.match(result.stderr, /share a label.*"Pylon" \(PYLON, PYLON_SUPPORT\)/);
+});
+
+test('the generator fails when it cannot tell which field takes the secret', () => {
+	const result = generateFrom({
+		components: {
+			schemas: {
+				Source: {
+					properties: { type: { enum: ['ACME'], 'x-hookdeck-labels': { ACME: 'Acme' } } },
+				},
+				SourceTypeConfig: {
+					oneOf: [
+						{
+							'x-docs-type': 'ACME',
+							properties: {
+								auth: { properties: { primary_key: {}, secondary_key: {} } },
+							},
+						},
+					],
+				},
+			},
+		},
+	});
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /ACME offers fields \[primary_key, secondary_key\] and requires none/);
 });
 
 /** Walk every property, including nested collection options. */

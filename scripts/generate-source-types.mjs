@@ -84,11 +84,59 @@ function deref(schemas, schema) {
 	return schema;
 }
 
-/** The fields an auth schema names, or `none` when it names nothing. */
-function fieldsShape(auth) {
+/**
+ * The field a single secret fills for a type whose spec offers several fields
+ * and requires none of them.
+ *
+ * The spec cannot say which one is the secret. Hookdeck's own verification code
+ * can, and each entry says what it found there.
+ */
+const PRIMARY_SECRET_FIELD = {
+	// The HMAC key. `header_key` and `timestamp_header` name the headers Grafana
+	// was configured to use, and default when unset.
+	GRAFANA: 'webhook_secret_key',
+	// A request passes if either key matches. `webhook_secret_key` checks the
+	// primary signature header; `secondary_webhook_secret_key` is for rotation.
+	ONSHAPE: 'webhook_secret_key',
+};
+
+/**
+ * The fields a single secret could fill, or `none` when the auth schema names
+ * nothing.
+ *
+ * Only the required fields count. Hookdeck adds optional fields beside a
+ * platform's secret: a second key for rotation (Box, Onshape), a header name
+ * override (Agentline, Lokalise), a verification mode (Buildkite). Counting them
+ * made those types look as if they needed two values, so the node refused a
+ * Webhook Secret it had been sending correctly. Optional fields stay reachable
+ * through Source Config (JSON).
+ */
+function fieldsShape(auth, type) {
 	const fields = Object.keys(auth.properties ?? {}).sort();
 	if (fields.length === 0) return { kind: 'none' };
-	return { kind: 'fields', fields };
+
+	const required = fields.filter((field) => auth.required?.includes(field));
+	const primary = PRIMARY_SECRET_FIELD[type];
+	if (primary) {
+		// Like KEYLESS_VERIFICATION, the entry only holds while the spec still leaves
+		// the choice open. Failing here makes the weekly drift check report it.
+		if (required.length > 0 || !fields.includes(primary)) {
+			throw new Error(
+				`${type} is in PRIMARY_SECRET_FIELD as "${primary}", but the spec now gives it fields [${fields.join(
+					', ',
+				)}] with [${required.join(', ')}] required. Check how Hookdeck verifies it and update the list.`,
+			);
+		}
+		return { kind: 'fields', fields: [primary] };
+	}
+
+	if (required.length > 0) return { kind: 'fields', fields: required };
+	if (fields.length === 1) return { kind: 'fields', fields };
+	throw new Error(
+		`${type} offers fields [${fields.join(
+			', ',
+		)}] and requires none of them, so the node cannot tell which one a Webhook Secret fills. Check how Hookdeck verifies it and add a PRIMARY_SECRET_FIELD entry.`,
+	);
 }
 
 /**
@@ -171,13 +219,13 @@ function specAuthShapeFor(schemas, type) {
 	// fields apply can only be known when one of those schemes is the type's own.
 	if (config.properties?.auth_type) {
 		const own = ownScheme(schemas, config, type);
-		return own ? fieldsShape(own) : { kind: 'choice' };
+		return own ? fieldsShape(own, type) : { kind: 'choice' };
 	}
 
 	const auth = deref(schemas, config.properties?.auth);
 	if (!auth) return { kind: 'none' };
 	if (auth.oneOf) return { kind: 'choice' };
-	return fieldsShape(auth);
+	return fieldsShape(auth, type);
 }
 
 function labelFor(labels, type) {
@@ -257,8 +305,9 @@ ${optionLines}
  * and an array alone cannot tell "takes no secret" apart from "several possible
  * schemes":
  *
- * - \`fields\`  — the named fields. One means a single supplied secret can be
- *   placed correctly; several means it cannot. A type offering a choice of
+ * - \`fields\`  — the required fields. One means a single supplied secret can be
+ *   placed correctly; several means it cannot. Optional fields, such as a
+ *   second key for rotation, are left out. A type offering a choice of
  *   schemes lands here when one of them is its own, because the node names the
  *   type as the \`auth_type\` and so selects that scheme.
  * - \`choice\`  — the type accepts a choice of schemes, none of them its own, so

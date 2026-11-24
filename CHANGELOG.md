@@ -15,12 +15,21 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   also out of date. It now says more than 800, which is what v0.4.0 lists.
 - Source Type names in the dropdown now match the names Hookdeck shows, for
   example HubSpot, PayPal and Customer.io. The node used to keep its own fixes
-  for some names; it now reads them from Hookdeck's API spec. Nine new Source
-  Types are listed: bundle.social, Chatbase, Dial, Facebook Messenger,
-  Instagram, LiveKit, Pylon (usepylon.com), Render and Sentry. Workflows keep
-  working, because each Source Type's value is unchanged.
+  for some names; it now reads them from Hookdeck's API spec. 38 new Source
+  Types are listed: 360Learning, Authorize.net, Bill.com, BitGo, Brex,
+  bundle.social, Chatbase, Checkr, Clockify, Dial, Facebook Messenger, FedEx,
+  Flutterwave, Gusto, Instagram, Juniper Mist, Klarna, Kontent.ai, LiveKit,
+  Loops, MakePlans, Marqeta, Merge, Mindbody, Monnify, PayFit, Polygon
+  Technology, Pylon (usepylon.com), Render, Roblox, Sentry, Strike,
+  SurveyMonkey, The Things Stack, Worldline, Worldpay, Zoho CRM and Zoho Flow.
+  Workflows keep working, because each Source Type's value is unchanged.
 
 ### Fixed
+
+- Fiserv, Formstack, Grafana and Vapi now accept a Webhook Secret. The node
+  counted their optional settings, such as a custom signature header name, as
+  values it needed, so it refused the secret and asked for Source Config (JSON)
+  instead. It now fills the one field Hookdeck requires.
 
 - Property Finder now offers the Webhook Secret Key field. The node didn't find
   Property Finder's settings in the API spec, so it offered no secret field,
