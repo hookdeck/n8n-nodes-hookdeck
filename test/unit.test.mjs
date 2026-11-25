@@ -12,6 +12,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import {
 	SIGNATURE_HEADER,
@@ -311,9 +315,10 @@ test('a choice of schemes that includes the type itself resolves to that scheme'
 	assert.equal(SOURCE_TYPE_AUTH.SENDGRID_INBOUND.kind, 'choice');
 });
 
-test('labels the spec cannot supply are not left to title-casing', () => {
-	// A choice of auth schemes carries no `x-docs-type` of its own, so these
-	// would otherwise read "Gitlab" and "Sendgrid Inbound".
+test('labels come from the spec, including types with a choice of auth schemes', () => {
+	// These used to be read from the auth schema's `x-docs-type`, which a choice of
+	// schemes doesn't carry, so they fell back to "Gitlab" and "Sendgrid Inbound".
+	// `x-hookdeck-labels` on Source.type has every type's label.
 	const label = (value) => SOURCE_TYPE_OPTIONS.find((o) => o.value === value)?.name;
 	assert.equal(label('GITLAB'), 'GitLab');
 	assert.equal(label('SENDGRID_INBOUND'), 'SendGrid Inbound Parse');
@@ -473,6 +478,127 @@ test('source types include the generic and common platform values', () => {
 test('source type options are sorted by display name', () => {
 	const names = SOURCE_TYPE_OPTIONS.map((o) => o.name.toLowerCase());
 	assert.deepEqual(names, [...names].sort());
+});
+
+test('a type whose schema name drops its dash still gets its auth shape', () => {
+	// PROPERTY-FINDER's config schema is SourceTypeConfigPROPERTYFINDER. Building the
+	// name from the type found nothing, and the node offered no secret field.
+	assert.deepEqual(SOURCE_TYPE_AUTH['PROPERTY-FINDER'], {
+		kind: 'fields',
+		fields: ['webhook_secret_key'],
+	});
+});
+
+test('optional auth fields do not stop a single secret being placed', () => {
+	// The spec added a second key for rotation to Box, a header name override to
+	// Lokalise and a verification mode to Buildkite. Counting those as needed made
+	// the node refuse the Webhook Secret it had been sending correctly.
+	assert.deepEqual(SOURCE_TYPE_AUTH.BOX, { kind: 'fields', fields: ['webhook_secret_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.LOKALISE, { kind: 'fields', fields: ['api_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.BUILDKITE, { kind: 'fields', fields: ['api_key'] });
+
+	// These shipped in 0.4.0 refusing a Webhook Secret, because optional settings
+	// (a store name, header names, an algorithm) were counted as needed.
+	for (const type of ['FISERV', 'FORMSTACK', 'GRAFANA', 'VAPI']) {
+		assert.deepEqual(SOURCE_TYPE_AUTH[type], { kind: 'fields', fields: ['webhook_secret_key'] }, type);
+	}
+
+	// Several fields and none required: the secret's field is named explicitly.
+	assert.deepEqual(SOURCE_TYPE_AUTH.ONSHAPE, { kind: 'fields', fields: ['webhook_secret_key'] });
+	assert.deepEqual(SOURCE_TYPE_AUTH.GRAFANA, { kind: 'fields', fields: ['webhook_secret_key'] });
+
+	// Two required values still can't come from one secret.
+	assert.deepEqual(SOURCE_TYPE_AUTH.ZOHO_CRM, { kind: 'fields', fields: ['api_key', 'header_key'] });
+});
+
+/** Runs the generator in check mode against a spec written to a temp file. */
+function generateFrom(spec) {
+	const file = join(mkdtempSync(join(tmpdir(), 'source-types-')), 'openapi.json');
+	writeFileSync(file, JSON.stringify(spec));
+	return spawnSync(
+		process.execPath,
+		['scripts/generate-source-types.mjs', '--check', '--spec', file],
+		{ encoding: 'utf8' },
+	);
+}
+
+const specWithType = (type) => ({ components: { schemas: { Source: { properties: { type } } } } });
+
+test('the generator fails on a spec without x-hookdeck-labels', () => {
+	const result = generateFrom(specWithType({ enum: ['STRIPE'] }));
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /no x-hookdeck-labels/);
+});
+
+test('the generator fails when two types share a label', () => {
+	const result = generateFrom(
+		specWithType({
+			enum: ['PYLON', 'PYLON_SUPPORT'],
+			'x-hookdeck-labels': { PYLON: 'Pylon', PYLON_SUPPORT: 'Pylon' },
+		}),
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /share a label.*"Pylon" \(PYLON, PYLON_SUPPORT\)/);
+});
+
+test('the generator fails when it cannot tell which field takes the secret', () => {
+	const result = generateFrom({
+		components: {
+			schemas: {
+				Source: {
+					properties: { type: { enum: ['ACME'], 'x-hookdeck-labels': { ACME: 'Acme' } } },
+				},
+				SourceTypeConfig: {
+					oneOf: [
+						{
+							'x-docs-type': 'ACME',
+							properties: {
+								auth: { properties: { primary_key: {}, secondary_key: {} } },
+							},
+						},
+					],
+				},
+			},
+		},
+	});
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /ACME offers fields \[primary_key, secondary_key\] and requires none/);
+});
+
+/** A spec with one Source type and the given auth schema. */
+const specWithAuth = (type, auth) => ({
+	components: {
+		schemas: {
+			Source: { properties: { type: { enum: [type], 'x-hookdeck-labels': { [type]: type } } } },
+			SourceTypeConfig: { oneOf: [{ 'x-docs-type': type, properties: { auth } }] },
+		},
+	},
+});
+
+test('the generator fails when a PRIMARY_SECRET_FIELD entry no longer applies', () => {
+	// Onshape gains a required field: the entry would now override the spec.
+	const nowRequired = generateFrom(
+		specWithAuth('ONSHAPE', {
+			properties: { webhook_secret_key: {}, secondary_webhook_secret_key: {} },
+			required: ['webhook_secret_key'],
+		}),
+	);
+	assert.notEqual(nowRequired.status, 0);
+	assert.match(nowRequired.stderr, /ONSHAPE is in PRIMARY_SECRET_FIELD/);
+
+	// No type reaches the entries at all, as when a type is removed or becomes a
+	// choice of schemes.
+	const unused = generateFrom(specWithAuth('ACME', { properties: { webhook_secret_key: {} } }));
+	assert.notEqual(unused.status, 0);
+	assert.match(unused.stderr, /PRIMARY_SECRET_FIELD has entries no Source type uses: GRAFANA, ONSHAPE/);
+});
+
+test('the generator fails when a required field has no property', () => {
+	const result = generateFrom(
+		specWithAuth('ACME', { properties: { header_key: {} }, required: ['webhook_secret_key'] }),
+	);
+	assert.notEqual(result.status, 0);
+	assert.match(result.stderr, /ACME requires \[webhook_secret_key\], which its auth schema does not define/);
 });
 
 /** Walk every property, including nested collection options. */
